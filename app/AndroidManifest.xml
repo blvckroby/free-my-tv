@@ -6,6 +6,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The profile button shows the initial of the Google account signed in on the TV. -->
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -24,6 +26,8 @@
         <package android:name="com.peacocktv.peacockandroid" />
         <package android:name="com.globo.globotv" />
         <package android:name="com.spotify.tv.android" />
+        <package android:name="com.nuvio.tv" />
+        <package android:name="com.monoplayer.app" />
         <package android:name="com.tcl.tv" />
         <package android:name="com.google.android.tv" />
         <package android:name="com.mediatek.wwtv.tvcenter" />

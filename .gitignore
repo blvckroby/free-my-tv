@@ -6,6 +6,9 @@ config.properties
 # Build output
 out/
 *.apk
+*.ipk
+*.wgt
+__pycache__/
 
 # macOS
 .DS_Store

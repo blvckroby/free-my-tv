@@ -49,17 +49,20 @@ final class Backdrop {
         nightImage = night == null ? null : Bitmap.createBitmap(night, FW, FH, Bitmap.Config.ARGB_8888);
     }
 
-    static Backdrop make(Bitmap src, boolean forLight) {
+    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        if (!forLight && poster != null) poster.recycle();
         float scale = Math.max((float) W / src.getWidth(), (float) H / src.getHeight());
         float sw = src.getWidth() * scale, sh = src.getHeight() * scale;
         c.drawBitmap(src, null, new RectF((W - sw) / 2, (H - sh) / 2, (W + sw) / 2, (H + sh) / 2), photo);
         src.recycle();
         if (forLight) {
             // Light design: everything comes from the photo without scrims.
-            Bitmap wide = card(out, WIDE_W, WIDE_H), tall = card(out, TALL_W, TALL_H);
+            // The tall cards show the title's poster when it has one; the wide one, its photo.
+            Bitmap wide = card(out, WIDE_W, WIDE_H), tall = card(poster != null ? poster : out, TALL_W, TALL_H);
+            if (poster != null) poster.recycle();
             int[] frost = reduce(out, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
             int[] glass = reduce(out, GW, GH, 2, 2);

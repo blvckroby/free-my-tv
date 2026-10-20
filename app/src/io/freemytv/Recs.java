@@ -43,7 +43,7 @@ final class Recs {
     static final class Pick {
         int id;
         String kind;            // "movie" or "tv"
-        String title, backdrop, meta = "", app, pkg;
+        String title, backdrop, poster = "", meta = "", app, pkg;   // backdrop: wide card; poster: tall cards (TMDB)
         boolean detailed;
     }
 
@@ -51,9 +51,10 @@ final class Recs {
 
     private static final String API = "https://api.themoviedb.org/3";
     private static final String IMAGES = "https://image.tmdb.org/t/p/original";
+    private static final String POSTERS = "https://image.tmdb.org/t/p/w780";
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 3;
+    private static final int CACHE_VERSION = 4;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
@@ -223,6 +224,11 @@ final class Recs {
 
     private boolean hasImage(Pick p) {
         return p.backdrop != null && imageFile(p).exists();
+    }
+
+    /** The vertical TMDB poster on disk (w780 is plenty for a 336 px card), or null when the title has none. */
+    private File posterFile(Pick p) {
+        return p.poster.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "poster" + p.poster.replace("/", ""));
     }
 
     private File imageFile(Pick p) {
@@ -460,6 +466,8 @@ final class Recs {
         p.kind = kind;
         p.title = o.optString(kind.equals("movie") ? "title" : "name");
         p.backdrop = backdrop;
+        String poster = o.optString("poster_path", "");
+        p.poster = poster.isEmpty() || "null".equals(poster) ? "" : poster;
         list.add(p);
     }
 
@@ -592,9 +600,16 @@ final class Recs {
 
     private void download(Pick p) throws IOException {
         File f = imageFile(p);
-        if (f.exists()) return;
         //noinspection ResultOfMethodCallIgnored
         f.getParentFile().mkdirs();
+        if (f.exists()) {
+            try {
+                downloadPoster(p);   // images saved before the posters existed
+            } catch (IOException e) {
+                AppLog.w("poster: " + e.getMessage());
+            }
+            return;
+        }
         File part = new File(f.getPath() + ".part");
         HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + p.backdrop).openConnection();
         c.setConnectTimeout(8000);
@@ -607,7 +622,29 @@ final class Recs {
             c.disconnect();
         }
         if (!part.renameTo(f)) throw new IOException("couldn't save the image");
+        try {
+            downloadPoster(p);
+        } catch (IOException e) {
+            AppLog.w("poster: " + e.getMessage());   // the tall cards then use the photo
+        }
         prune(f.getParentFile());
+    }
+
+    private void downloadPoster(Pick p) throws IOException {
+        File f = posterFile(p);
+        if (f == null || f.exists()) return;
+        File part = new File(f.getPath() + ".part");
+        HttpURLConnection c = (HttpURLConnection) new URL(POSTERS + p.poster).openConnection();
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(20000);
+        try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
+            byte[] buffer = new byte[16384];
+            int n;
+            while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        } finally {
+            c.disconnect();
+        }
+        if (!part.renameTo(f)) throw new IOException("couldn't save the poster");
     }
 
     /** Reads the original (≥ 1920 wide) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
@@ -628,7 +665,10 @@ final class Recs {
             if (b == null) throw new IOException("unreadable image");
             AppLog.w("backdrop \u201c" + p.title + "\u201d: " + bounds.outWidth + "×" + bounds.outHeight);
             boolean forLight = light;
-            Backdrop backdrop = Backdrop.make(b, forLight);
+            Bitmap poster = null;
+            File pf = posterFile(p);
+            if (forLight && pf != null && pf.exists()) poster = BitmapFactory.decodeFile(pf.getPath());   // null if unreadable
+            Backdrop backdrop = Backdrop.make(b, forLight, poster);
             if (forLight != light) return;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(p.backdrop, backdrop);
@@ -644,9 +684,9 @@ final class Recs {
 
     private static void prune(File dir) {
         File[] files = dir.listFiles();
-        if (files == null || files.length <= 24) return;
+        if (files == null || files.length <= 48) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
-        for (int i = 0; i < files.length - 24; i++) {
+        for (int i = 0; i < files.length - 48; i++) {
             //noinspection ResultOfMethodCallIgnored
             files[i].delete();
         }
@@ -658,7 +698,7 @@ final class Recs {
         try {
             JSONArray a = new JSONArray();
             for (Pick p : picks) {
-                a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop)
+                a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("poster", p.poster)
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("detailed", p.detailed));
             }
@@ -679,6 +719,7 @@ final class Recs {
             p.kind = o.optString("kind");
             p.title = o.optString("title");
             p.backdrop = o.optString("backdrop");
+            p.poster = o.optString("poster");
             p.meta = o.optString("meta");
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");

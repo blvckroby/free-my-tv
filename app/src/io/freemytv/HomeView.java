@@ -132,12 +132,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
     private List<Recs.Pick> cards = new ArrayList<>();
-    private final Spring[] topFocus = new Spring[6];
-    private final RectF[] topRects = new RectF[6];
+    /** Top row: the three tabs, then the corner buttons (Live TV, HDMI, Settings, profile). */
+    private static final int TOP = 7;
+    private final Spring[] topFocus = new Spring[TOP];
+    private final RectF[] topRects = new RectF[TOP];
     private final Spring[] cardFocus = new Spring[3];
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip;
+    private Paint lAvatar, lClock, lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip;
     private Shader lightGradient;
 
     // Shelf
@@ -328,7 +330,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < TOP; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
         }
@@ -418,6 +420,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
         lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
+        lightButtons.add(HomeApps.action(HomeApps.PROFILE, "profile",
+                Profile.email.isEmpty() ? Ui.tr("Conta Google", "Google account") : Profile.email, "profile"));
+    }
+
+    /** The account may have appeared (permission just given): redraw the profile button with its name. */
+    void refreshProfile() {
+        Profile.refresh(getContext());
+        makeLightButtons();
+        statusDirty = true;
+        status.invalidate();
     }
 
     private static String[] tabs() {
@@ -488,6 +500,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         screen.set(0, 0, w, h);
         scene.setSize(w, h);
         makePaints();
+        Profile.refresh(getContext());
         gridLabels = null;
         clockMinute = -1;
         updateClock();
@@ -519,6 +532,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lCardTitle.setLetterSpacing(0.012f);
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
+        lAvatar = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+        lAvatar.setTextAlign(Paint.Align.CENTER);
+        lClock = Ui.numbers(Ui.displayMedium, 52 * k, L_INK);
+        lClock.setTextAlign(Paint.Align.CENTER);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         lightGradient = null;
@@ -604,6 +621,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (updateClock()) {
             layoutStatus();
             status.invalidate();
+            heroLayer.invalidate();   // the clock at the top
             if (hero != null && hero.clock) {
                 refreshHero(false);
                 heroLayer.invalidate();
@@ -864,6 +882,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
         lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
         lTip.setColor(tone(L_INK, WHITE));
+        lClock.setColor(tone(L_INK, WHITE));
         staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
     }
 
@@ -1100,7 +1119,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Paint text = lQuote;
         // The corner buttons' names appear in this row: the quotes fade out while one of them has focus.
         float fade = 1;
-        for (int i = 3; i < 6; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < TOP; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         int textColor = text.getColor();
         text.setColor(Ui.alpha(textColor, fade));
@@ -2152,7 +2171,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x = topRects[i].right + 4 * k;
         }
         float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
-        for (int i = 2; i >= 0; i--) {
+        for (int i = lightButtons.size() - 1; i >= 0; i--) {
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
@@ -2231,6 +2250,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         applyTone();
         String hello = Ui.tr("Para você", "For You");
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        // The time, centered at the top, in the same font as the rest.
+        c.drawText(clockText, w / 2f, L_BUTTON_CY * k + Ui.halfCap(lClock), lClock);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -2317,7 +2338,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < lightButtons.size(); i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
@@ -2332,8 +2353,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 fill.setColor(Ui.alpha(0xFFFFFFFF, f));
                 c.drawCircle(cell.centerX(), cell.centerY(), rad, fill);
             }
-            Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s,
-                    blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+            if (lightButtons.get(i).kind == HomeApps.PROFILE) {
+                drawAvatar(c, cell.centerX(), cell.centerY(), rad - 6 * k * s, f);
+            } else {
+                Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s,
+                        blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+            }
             if (f > 0.01f) {
                 String label = lightButtons.get(i).label;
                 float half = lTip.measureText(label) / 2;
@@ -2342,6 +2367,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
             }
         }
+    }
+
+    /** The Google account: its initial on a colored disc, or a person's silhouette while the name isn't known. */
+    private void drawAvatar(Canvas c, float cx, float cy, float r, float focus) {
+        fill.setShader(null);
+        if (!Profile.initial.isEmpty()) {
+            fill.setColor(Profile.color);
+            c.drawCircle(cx, cy, r, fill);
+            c.drawText(Profile.initial, cx, cy + Ui.halfCap(lAvatar), lAvatar);
+            return;
+        }
+        fill.setColor(blend(tone(L_INK, 0xEBFFFFFF), L_INK, focus));
+        c.drawCircle(cx, cy - r * 0.28f, r * 0.34f, fill);
+        tmp.set(cx - r * 0.62f, cy + r * 0.16f, cx + r * 0.62f, cy + r * 1.3f);
+        c.save();
+        c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.78f);
+        c.drawRoundRect(tmp, r * 0.62f, r * 0.62f, fill);
+        c.restore();
     }
 
     private boolean moveLight(int dx, int dy) {
@@ -2371,7 +2414,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(5, topIndex + dx));
+                    int next = Math.max(0, Math.min(TOP - 1, topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
