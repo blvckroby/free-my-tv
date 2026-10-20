@@ -57,6 +57,7 @@ final class Recs {
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
+    static final String[] PERIOD_LABEL_IT = {"PER QUESTA MATTINA", "PER QUESTO POMERIGGIO", "PER STASERA"};
     static final String[] PERIOD_LABEL_ES = {"PARA ESTA MAÑANA", "PARA ESTA TARDE", "PARA ESTA NOCHE"};
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
@@ -152,7 +153,7 @@ final class Recs {
     String error() { return error; }
 
     static String periodLabel() {
-        return (Ui.es ? PERIOD_LABEL_ES : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
+        return (Ui.it ? PERIOD_LABEL_IT : Ui.es ? PERIOD_LABEL_ES : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
     }
 
     private static int period(long now) {
@@ -406,11 +407,23 @@ final class Recs {
         List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
         for (int i = 0; i < movies.length(); i++) add(newMovies, movies.getJSONObject(i), "movie");
         for (int i = 0; i < shows.length(); i++) add(newShows, shows.getJSONObject(i), "tv");
-        // Trending first, then the new releases; movies and shows alternating, without repeats, up to 24.
+        // 3. Acclaimed titles to discover: well rated, with plenty of votes, a different page each day so the same
+        //    ones don't come back (what people already watch a lot is in the trending list above).
+        int page = 1 + (int) ((System.currentTimeMillis() / 86_400_000L) % 3);
+        String best = "&sort_by=vote_average.desc&page=" + page + common.replaceAll("&sort_by=[a-z._]+", "");
+        JSONArray topMovies = get("/discover/movie?vote_count.gte=1500&primary_release_date.gte=" + day(-365 * 8)
+                + best).getJSONArray("results");
+        JSONArray topShows = get("/discover/tv?vote_count.gte=500&first_air_date.gte=" + day(-365 * 8)
+                + best).getJSONArray("results");
+        List<Pick> gemMovies = new ArrayList<>(), gemShows = new ArrayList<>();
+        for (int i = 0; i < topMovies.length(); i++) add(gemMovies, topMovies.getJSONObject(i), "movie");
+        for (int i = 0; i < topShows.length(); i++) add(gemShows, topShows.getJSONObject(i), "tv");
+        // Each source gets its share (up to 10 trending, 10 new, 10 to discover); movies and shows alternating, no repeats.
         List<Pick> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
-        alternate(list, seen, hotMovies, hotShows, 24);
-        alternate(list, seen, newMovies, newShows, 24);
+        alternate(list, seen, hotMovies, hotShows, 10);
+        alternate(list, seen, newMovies, newShows, 20);
+        alternate(list, seen, gemMovies, gemShows, 30);
         if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
         picks = list;
         period = p;
@@ -420,6 +433,7 @@ final class Recs {
 
     /** Language of titles and genres; the services come from the region. */
     private static String lang() {
+        if (Ui.it) return "it-IT";
         if (Ui.es) return "ES".equals(java.util.Locale.getDefault().getCountry()) ? "es-ES" : "es-MX";
         return Ui.en ? "en-US" : "pt-BR";
     }
@@ -469,6 +483,7 @@ final class Recs {
         } else {
             int seasons = o.optInt("number_of_seasons");
             if (seasons > 0 && Ui.en) parts.add(seasons == 1 ? "1 season" : seasons + " seasons");
+            else if (seasons > 0 && Ui.it) parts.add(seasons == 1 ? "1 stagione" : seasons + " stagioni");
             else if (seasons > 0) parts.add(seasons == 1 ? "1 temporada" : seasons + " temporadas");
         }
         JSONObject wp = o.optJSONObject("watch/providers");
@@ -492,6 +507,11 @@ final class Recs {
         {"War & Politics", "Guerra e Política"}, {"Kids", "Infantil"}, {"News", "Notícias"}, {"Soap", "Novela"},
         {"Talk", "Entrevistas"},
     };
+    private static final String[][] GENRES_IT = {
+        {"Action & Adventure", "Azione e Avventura"}, {"Sci-Fi & Fantasy", "Fantascienza e Fantasy"},
+        {"War & Politics", "Guerra e Politica"}, {"Kids", "Bambini"}, {"News", "Notizie"},
+        {"Soap", "Soap opera"}, {"Talk", "Talk show"},
+    };
     private static final String[][] GENRES_ES = {
         {"Action & Adventure", "Acción y Aventura"}, {"Sci-Fi & Fantasy", "Ciencia ficción y Fantasía"},
         {"War & Politics", "Guerra y Política"}, {"Kids", "Infantil"}, {"News", "Noticias"},
@@ -499,7 +519,7 @@ final class Recs {
     };
 
     private static String genre(String name) {
-        for (String[] g : Ui.es ? GENRES_ES : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
+        for (String[] g : Ui.it ? GENRES_IT : Ui.es ? GENRES_ES : GENRES_PT) if (g[0].equalsIgnoreCase(name)) return g[1];
         return name;
     }
 

@@ -198,7 +198,10 @@ final class HomeMode {
                         + "show there: Claude Code can remove them from your computer), then try once more.",
                         "la configuración inicial del TV guardó el Wi-Fi, y desactivarla borraría esas redes. "
                         + "En Ajustes → Red e Internet, olvida la red y vuelve a conectarte (las fuera de alcance no aparecen "
-                        + "ahí: Claude Code las borra desde la computadora) y vuelve a intentarlo."));
+                        + "ahí: Claude Code las borra desde la computadora) y vuelve a intentarlo.",
+                        "la configurazione iniziale della TV ha salvato il Wi-Fi, e disattivarla cancellerebbe quelle reti. "
+                        + "In Impostazioni → Rete e Internet, dimentica la rete e riconnettiti (quelle fuori portata non compaiono "
+                        + "lì: Claude Code le rimuove dal computer), poi riprova."));
             }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
                 busy(c, Ui.tr("Medindo o Início original…", "Measuring the original home screen…"));
