@@ -40,8 +40,9 @@ public class HomeActivity extends Activity {
         getWindow().setBackgroundDrawable(null);
         // Once: the TV asks to let Free My TV see the Google account's name, for the profile button.
         android.content.SharedPreferences asked = getSharedPreferences("profile", MODE_PRIVATE);
-        if (!Profile.granted(this) && !asked.getBoolean("asked", false)) {
-            asked.edit().putBoolean("asked", true).apply();
+        int tries = asked.getInt("tries", 0);
+        if (!Profile.granted(this) && tries < 3) {
+            asked.edit().putInt("tries", tries + 1).apply();
             requestPermissions(new String[] {android.Manifest.permission.GET_ACCOUNTS}, 1);
         }
     }

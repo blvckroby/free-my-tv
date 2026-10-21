@@ -43,7 +43,7 @@ final class Recs {
     static final class Pick {
         int id;
         String kind;            // "movie" or "tv"
-        String title, backdrop, poster = "", meta = "", app, pkg;   // backdrop: wide card; poster: tall cards (TMDB)
+        String title, backdrop, cover = "", poster = "", meta = "", app, pkg;   // backdrop: wide card; poster: tall cards (TMDB)
         boolean detailed;
     }
 
@@ -52,9 +52,10 @@ final class Recs {
     private static final String API = "https://api.themoviedb.org/3";
     private static final String IMAGES = "https://image.tmdb.org/t/p/original";
     private static final String POSTERS = "https://image.tmdb.org/t/p/w780";
+    private static final String COVERS = "https://image.tmdb.org/t/p/w1280";
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 4;
+    private static final int CACHE_VERSION = 5;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
@@ -229,6 +230,10 @@ final class Recs {
     /** The vertical TMDB poster on disk (w780 is plenty for a 336 px card), or null when the title has none. */
     private File posterFile(Pick p) {
         return p.poster.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "poster" + p.poster.replace("/", ""));
+    }
+
+    private File coverFile(Pick p) {
+        return p.cover.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "cover" + p.cover.replace("/", ""));
     }
 
     private File imageFile(Pick p) {
@@ -466,6 +471,7 @@ final class Recs {
         p.kind = kind;
         p.title = o.optString(kind.equals("movie") ? "title" : "name");
         p.backdrop = backdrop;
+        p.cover = backdrop;     // TMDB's own horizontal cover, kept for the wide card (backdrop may be swapped for a textless one)
         String poster = o.optString("poster_path", "");
         p.poster = poster.isEmpty() || "null".equals(poster) ? "" : poster;
         list.add(p);
@@ -631,10 +637,14 @@ final class Recs {
     }
 
     private void downloadPoster(Pick p) throws IOException {
-        File f = posterFile(p);
+        fetch(posterFile(p), POSTERS + p.poster);
+        fetch(coverFile(p), COVERS + p.cover);
+    }
+
+    private static void fetch(File f, String url) throws IOException {
         if (f == null || f.exists()) return;
         File part = new File(f.getPath() + ".part");
-        HttpURLConnection c = (HttpURLConnection) new URL(POSTERS + p.poster).openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
@@ -644,7 +654,7 @@ final class Recs {
         } finally {
             c.disconnect();
         }
-        if (!part.renameTo(f)) throw new IOException("couldn't save the poster");
+        if (!part.renameTo(f)) throw new IOException("couldn't save the image");
     }
 
     /** Reads the original (≥ 1920 wide) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
@@ -668,7 +678,10 @@ final class Recs {
             Bitmap poster = null;
             File pf = posterFile(p);
             if (forLight && pf != null && pf.exists()) poster = BitmapFactory.decodeFile(pf.getPath());   // null if unreadable
-            Backdrop backdrop = Backdrop.make(b, forLight, poster);
+            Bitmap cover = null;
+            File cf = coverFile(p);
+            if (forLight && cf != null && cf.exists()) cover = BitmapFactory.decodeFile(cf.getPath());
+            Backdrop backdrop = Backdrop.make(b, forLight, poster, cover);
             if (forLight != light) return;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(p.backdrop, backdrop);
@@ -684,9 +697,9 @@ final class Recs {
 
     private static void prune(File dir) {
         File[] files = dir.listFiles();
-        if (files == null || files.length <= 48) return;
+        if (files == null || files.length <= 90) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
-        for (int i = 0; i < files.length - 48; i++) {
+        for (int i = 0; i < files.length - 90; i++) {
             //noinspection ResultOfMethodCallIgnored
             files[i].delete();
         }
@@ -698,7 +711,7 @@ final class Recs {
         try {
             JSONArray a = new JSONArray();
             for (Pick p : picks) {
-                a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("poster", p.poster)
+                a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("cover", p.cover).put("poster", p.poster)
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("detailed", p.detailed));
             }
@@ -720,6 +733,7 @@ final class Recs {
             p.title = o.optString("title");
             p.backdrop = o.optString("backdrop");
             p.poster = o.optString("poster");
+            p.cover = o.optString("cover");
             p.meta = o.optString("meta");
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");

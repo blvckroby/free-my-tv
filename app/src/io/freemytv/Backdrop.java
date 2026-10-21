@@ -49,11 +49,12 @@ final class Backdrop {
         nightImage = night == null ? null : Bitmap.createBitmap(night, FW, FH, Bitmap.Config.ARGB_8888);
     }
 
-    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster) {
+    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster, Bitmap cover) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         if (!forLight && poster != null) poster.recycle();
+        if (!forLight && cover != null) cover.recycle();
         float scale = Math.max((float) W / src.getWidth(), (float) H / src.getHeight());
         float sw = src.getWidth() * scale, sh = src.getHeight() * scale;
         c.drawBitmap(src, null, new RectF((W - sw) / 2, (H - sh) / 2, (W + sw) / 2, (H + sh) / 2), photo);
@@ -61,8 +62,12 @@ final class Backdrop {
         if (forLight) {
             // Light design: everything comes from the photo without scrims.
             // The tall cards show the title's poster when it has one; the wide one, its photo.
-            Bitmap wide = card(out, WIDE_W, WIDE_H), tall = card(poster != null ? poster : out, TALL_W, TALL_H);
+            // The wide card shows TMDB's own horizontal cover, cropped a little above the middle (faces and titles
+            // sit high); the tall ones, its poster.
+            Bitmap wide = card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f);
+            Bitmap tall = card(poster != null ? poster : out, TALL_W, TALL_H, 0.4f);
             if (poster != null) poster.recycle();
+            if (cover != null) cover.recycle();
             int[] frost = reduce(out, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
             int[] glass = reduce(out, GW, GH, 2, 2);
@@ -144,12 +149,12 @@ final class Backdrop {
         return new Bitmap[] {out, frost};
     }
 
-    /** The center of the photo at the card's aspect ratio, filtered down (halving while possible) to the exact size. */
-    private static Bitmap card(Bitmap full, int w, int h) {
+    /** The photo at the card's aspect ratio, filtered down (halving while possible) to the exact size. */
+    private static Bitmap card(Bitmap full, int w, int h, float bias) {
         float ratio = (float) w / h;
         int cw = Math.min(full.getWidth(), Math.round(full.getHeight() * ratio));
         int ch = Math.min(full.getHeight(), Math.round(cw / ratio));
-        Bitmap b = Bitmap.createBitmap(full, (full.getWidth() - cw) / 2, (full.getHeight() - ch) / 2, cw, ch);
+        Bitmap b = Bitmap.createBitmap(full, (full.getWidth() - cw) / 2, Math.round((full.getHeight() - ch) * bias), cw, ch);
         while (b.getWidth() / 2 >= w) {
             Bitmap half = Bitmap.createScaledBitmap(b, b.getWidth() / 2, b.getHeight() / 2, true);
             if (b != full) b.recycle();

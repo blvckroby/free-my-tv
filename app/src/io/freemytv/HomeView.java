@@ -427,6 +427,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The account may have appeared (permission just given): redraw the profile button with its name. */
     void refreshProfile() {
         Profile.refresh(getContext());
+        Profile.loadPhoto(getContext(), () -> post(() -> { statusDirty = true; status.invalidate(); }));
         makeLightButtons();
         statusDirty = true;
         status.invalidate();
@@ -501,6 +502,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         scene.setSize(w, h);
         makePaints();
         Profile.refresh(getContext());
+        Profile.loadPhoto(getContext(), () -> post(() -> { statusDirty = true; status.invalidate(); }));
         gridLabels = null;
         clockMinute = -1;
         updateClock();
@@ -534,7 +536,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
         lAvatar = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
         lAvatar.setTextAlign(Paint.Align.CENTER);
-        lClock = Ui.numbers(Ui.displayMedium, 52 * k, L_INK);
+        lClock = Ui.text(Ui.displaySemibold, 64 * k, L_INK);
+        lClock.setLetterSpacing(0.004f);
         lClock.setTextAlign(Paint.Align.CENTER);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
@@ -2251,7 +2254,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         String hello = Ui.tr("Para você", "For You");
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         // The time, centered at the top, in the same font as the rest.
-        c.drawText(clockText, w / 2f, L_BUTTON_CY * k + Ui.halfCap(lClock), lClock);
+        c.drawText(clockText, w / 2f, L_TITLE_BASE * k, lClock);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -2372,6 +2375,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The Google account: its initial on a colored disc, or a person's silhouette while the name isn't known. */
     private void drawAvatar(Canvas c, float cx, float cy, float r, float focus) {
         fill.setShader(null);
+        Paint picture = Profile.photo;
+        if (picture != null) {
+            Profile.drawPhoto(c, picture, cx, cy, r);
+            return;
+        }
         if (!Profile.initial.isEmpty()) {
             fill.setColor(Profile.color);
             c.drawCircle(cx, cy, r, fill);
