@@ -111,7 +111,9 @@ The first values come from `config.properties`, created by the first build (Goog
 | Key | What it does | Default |
 |---|---|---|
 | `tmdb_key` | Your free TMDB key, for the picks | empty |
-| `tmdb_region` | Your country (two letters): which titles are on which app | `US` |
+| `tmdb_region` | Your country (two letters): which titles are on which app, and the country of the Top 10 in the Movies and Shows tabs | `US` |
+| `tmdb_session` | Optional: your TMDB profile, so Explore follows your favorites, ratings and watchlist. Get it with `python3 tools/tmdb_login.py`; it is secret | empty |
+| `profile_photo`, `profile_name` | Optional: a link to your picture and a name for the profile button (Android does not share the Google photo) | empty |
 | `latitude`, `longitude` | Your city, for the weather and the sunset | New York |
 | `city` | The name on the weather card | `Weather` |
 | `language` | `auto` (follows the TV), `en`, `es`, `it` or `pt` | `auto` |

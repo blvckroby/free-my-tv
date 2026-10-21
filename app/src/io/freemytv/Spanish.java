@@ -6,6 +6,7 @@ final class Spanish {
 
     static String text(String english) {
         switch (english) {
+            case "Top 10 in ": return "Top 10 en ";
             case "Google account": return "Cuenta de Google";
             case "Live TV": return "TV en vivo";
             case "All Apps": return "Todas las apps";

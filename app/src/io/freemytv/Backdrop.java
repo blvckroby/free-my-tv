@@ -24,11 +24,12 @@ import android.graphics.Shader;
 final class Backdrop {
     static final int W = 1920, H = 1080, FW = 192, FH = 108, GW = 480, GH = 270;
     /** The cards at their focused size (1.05×): the wide one and the two tall ones. */
-    static final int WIDE_W = 1092, WIDE_H = 464, TALL_W = 336, TALL_H = 464;
+    static final int WIDE_W = 1092, WIDE_H = 464, TALL_W = 336, TALL_H = 464, FEATURE_W = 840, FEATURE_H = 464;
     final Bitmap image;
     final int[] frost;      // heavily blurred (frosted glass, bottom drawer)
     final int[] glass;      // lightly blurred (Liquid Glass: the photo shows through the glass)
     final Bitmap wide, tall;            // the photo on the cards
+    Bitmap feature;                     // Top 10: the selected card, wide but not as wide as `wide`
     final int[] light, lightGlass;      // by day: the frosted and glass versions, lightened
     final Bitmap lightImage;            // by day: the background (the lightened frosted version, scaled up on screen)
     final int[] nightFrost, nightGlass; // at night: frosted (the bottom drawer's frosted glass) and glass, darkened
@@ -49,7 +50,7 @@ final class Backdrop {
         nightImage = night == null ? null : Bitmap.createBitmap(night, FW, FH, Bitmap.Config.ARGB_8888);
     }
 
-    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster, Bitmap cover) {
+    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster, Bitmap cover, boolean top) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -64,7 +65,9 @@ final class Backdrop {
             // The tall cards show the title's poster when it has one; the wide one, its photo.
             // The wide card shows TMDB's own horizontal cover, cropped a little above the middle (faces and titles
             // sit high); the tall ones, its poster.
-            Bitmap wide = card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f);
+            // Top 10: the selected card is a 16:9-ish "feature" instead of the wide one.
+            Bitmap wide = top ? null : card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f);
+            Bitmap feature = top ? card(out, FEATURE_W, FEATURE_H, 0.38f) : null;
             Bitmap tall = card(poster != null ? poster : out, TALL_W, TALL_H, 0.4f);
             if (poster != null) poster.recycle();
             if (cover != null) cover.recycle();
@@ -75,7 +78,9 @@ final class Backdrop {
             int[] night = darken(frost.clone(), 0.76f);
             int[] nightGlass = darken(glass, 0.56f);
             out.recycle();
-            return new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass);
+            Backdrop made = new Backdrop(null, frost, null, wide, tall, light, lightGlass, night, nightGlass);
+            made.feature = feature;
+            return made;
         }
 
         float boost = Math.max(0, Math.min(0.3f, (luminance(out, 0, 0.22f, 0.5f, 0.62f) - 0.22f) * 1.1f));
