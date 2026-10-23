@@ -405,6 +405,46 @@ final class Recs {
         main.post(() -> { for (Listener l : new ArrayList<>(listeners)) l.onRecs(); });
     }
 
+
+    /** TMDB lists video references, not playable video files. Resolve the best embeddable YouTube trailer off the UI thread. */
+    void findTrailer(Pick pick, java.util.function.Consumer<String> callback) {
+        if (pick == null || !hasKey(context)) {
+            main.post(() -> callback.accept(null));
+            return;
+        }
+        final String kind = "tv".equals(pick.kind) ? "tv" : "movie";
+        final int id = pick.id;
+        io.execute(() -> {
+            String videoId = null;
+            try {
+                videoId = chooseTrailer(get("/" + kind + "/" + id + "/videos?language=it-IT").optJSONArray("results"));
+                if (videoId == null) {
+                    videoId = chooseTrailer(get("/" + kind + "/" + id + "/videos?language=en-US").optJSONArray("results"));
+                }
+            } catch (Exception e) {
+                AppLog.w("trailer lookup: " + e.getClass().getSimpleName());
+            }
+            final String found = videoId;
+            main.post(() -> callback.accept(found));
+        });
+    }
+
+    private static String chooseTrailer(JSONArray videos) {
+        if (videos == null) return null;
+        String best = null;
+        int bestScore = -1;
+        for (int i = 0; i < videos.length(); i++) {
+            JSONObject v = videos.optJSONObject(i);
+            if (v == null || !"YouTube".equalsIgnoreCase(v.optString("site"))
+                    || !"Trailer".equalsIgnoreCase(v.optString("type"))) continue;
+            String key = v.optString("key");
+            if (!key.matches("[A-Za-z0-9_-]{11}")) continue;
+            int score = v.optBoolean("official") ? 2 : 1;
+            if (score > bestScore) { best = key; bestScore = score; }
+        }
+        return best;
+    }
+
     // MARK: - TMDB
 
     private void fetchList(int p) throws Exception {
