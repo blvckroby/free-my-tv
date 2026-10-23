@@ -174,7 +174,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int shelfIndex;
     private boolean dockEditing, dockLongTriggered;
     private List<HomeApps.Item> dockBefore;
-    private final Runnable dockLongPress = () -> {
+    private final Runnable dockLongPress = this::beginDockReorder;
+
+    private void beginDockReorder() {
         if (okDown && zone == Z_SHELF && !sheetOpen && !drawerOpen && !shelf.isEmpty()) {
             dockEditing = true;
             dockLongTriggered = true;
@@ -186,7 +188,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tilesDirty = true;
             tiles.invalidate();
         }
-    };
+    }
 
     // Corner capsule
     private List<HomeApps.Item> statusItems = new ArrayList<>();
