@@ -407,6 +407,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         running = false;
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(dockLongPress);
+        okDown = false;
         data.removeListener(this);
         recs.removeListener(this);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
@@ -2397,7 +2399,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightTop(Canvas c) {
         applyTone();
         // Navigation tabs replace the large heading; compact clock near the right.
-        c.drawText(clockText, 1430 * k, L_BUTTON_CY * k + Ui.halfCap(lClock), lClock);
+        c.drawText(clockText, 1110 * k, L_BUTTON_CY * k + Ui.halfCap(lClock), lClock);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
