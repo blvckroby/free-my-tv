@@ -81,7 +81,8 @@ EOF
   -d out/classes $(find app/src out/gen -name '*.java')
 # Use the JAR entry point: Windows SDKs ship d8.bat rather than an executable named d8.
 "$JAVA_HOME/bin/java" -cp "$BT/lib/d8.jar" com.android.tools.r8.D8 --release --min-api 28 --lib "$AJ" --output out $(find out/classes -name '*.class')
-(cd out && zip -qj base.apk classes.dex)
+# JDK jar updates the APK without needing the Unix zip utility (missing in some Git Bash installations).
+"$JAVA_HOME/bin/jar" uf out/base.apk -C out classes.dex
 "$BT/zipalign" -f -p 4 out/base.apk out/aligned.apk
 
 # --- Sign with your own key (created once; updates need the same key, so keep freemytv.keystore)
