@@ -2604,7 +2604,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void scheduleTrailer() {
         stopTrailer();
-        if (!running || zone != Z_CARDS || sheetOpen || drawerOpen || cardIndex >= cards.size()) return;
+        if (!running || tab == 0 || zone != Z_CARDS || sheetOpen || drawerOpen || cardIndex >= cards.size()) return;
         final Recs.Pick pick = cards.get(cardIndex);
         final int generation = trailerGeneration;
         final String key = Recs.key(pick);
@@ -2624,7 +2624,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private boolean stillSelected(String key) {
-        return running && zone == Z_CARDS && !sheetOpen && !drawerOpen
+        return running && tab != 0 && zone == Z_CARDS && !sheetOpen && !drawerOpen
                 && cardIndex < cards.size() && key.equals(Recs.key(cards.get(cardIndex)));
     }
 
