@@ -88,7 +88,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final ExecutorService LOADER = Executors.newSingleThreadExecutor();
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
     // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
-    private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
+    private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 68, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
     private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
@@ -172,6 +172,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
     private final RectF platterRect = new RectF();
     private int shelfIndex;
+    private boolean dockEditing, dockLongTriggered;
+    private List<HomeApps.Item> dockBefore;
+    private final Runnable dockLongPress = this::beginDockReorder;
+
+    private void beginDockReorder() {
+        if (okDown && zone == Z_SHELF && !sheetOpen && !drawerOpen && !shelf.isEmpty()) {
+            dockEditing = true;
+            dockLongTriggered = true;
+            dockBefore = new ArrayList<>(shelf);
+            showToast(Ui.tr("Mover apps: setas, OK salva, Voltar cancela",
+                    "Move apps: arrows, OK saves, Back cancels",
+                    "Mover apps: flechas, OK guarda, Atrás cancela",
+                    "Sposta app: frecce, OK salva, Indietro annulla"));
+            tilesDirty = true;
+            tiles.invalidate();
+        }
+    }
 
     // Corner capsule
     private List<HomeApps.Item> statusItems = new ArrayList<>();
@@ -392,6 +409,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         running = false;
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(dockLongPress);
+        okDown = false;
         data.removeListener(this);
         recs.removeListener(this);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
@@ -561,7 +580,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lRank.setShadowLayer(9 * k, 0, 3 * k, 0xCC000000);   // a light outer shadow: readable on white too
         lAvatar = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
         lAvatar.setTextAlign(Paint.Align.CENTER);
-        lClock = Ui.text(Ui.displaySemibold, 64 * k, L_INK);
+        lClock = Ui.text(Ui.displaySemibold, 30 * k, L_INK);
         lClock.setLetterSpacing(0.004f);
         lClock.setTextAlign(Paint.Align.CENTER);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
@@ -1209,7 +1228,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawShelfTile(Canvas c, int i) {
         HomeApps.Item it = shelf.get(i);
-        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + FOCUS_GROW * f;
+        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + FOCUS_GROW * f + (dockEditing && i == shelfIndex ? 0.12f : 0);
         RectF base = tileRects[i];
         float bw = base.width(), bh = base.height(), r0 = TILE_RADIUS * k;
         float cx = base.centerX(), cy = base.centerY();
@@ -1852,10 +1871,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 // Opens on release, and only if the press happened here: the release of an OK pressed inside another
                 // app opens nothing.
                 if (down) {
-                    if (e.getRepeatCount() == 0) okDown = true;
+                    if (e.getRepeatCount() == 0) {
+                        okDown = true;
+                        dockLongTriggered = false;
+                        if (zone == Z_SHELF && !sheetOpen && !drawerOpen)
+                            handler.postDelayed(dockLongPress, 650);
+                    }
                 } else {
-                    if (okDown && !e.isCanceled() && spoken.keyClick()) activate();
+                    handler.removeCallbacks(dockLongPress);
+                    if (dockEditing && !dockLongTriggered && okDown && !e.isCanceled()) {
+                        List<String> order = new ArrayList<>();
+                        for (HomeApps.Item item : shelf) if (item.pkg != null && !item.pkg.isEmpty()) order.add(item.pkg);
+                        Prefs.setShelf(order);
+                        dockEditing = false;
+                        dockBefore = null;
+                        showToast(Ui.tr("Ordem salva", "App order saved", "Orden guardado", "Ordine salvato"));
+                    } else if (okDown && !dockEditing && !dockLongTriggered && !e.isCanceled() && spoken.keyClick()) {
+                        activate();
+                    }
                     okDown = false;
+                    dockLongTriggered = false;
                 }
                 return true;
             case KeyEvent.KEYCODE_BACK:
@@ -1872,6 +1907,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void back() {
+        if (dockEditing) {
+            dockEditing = false;
+            if (dockBefore != null) setShelf(dockBefore);
+            dockBefore = null;
+            retarget(true);
+            return;
+        }
         if (sheetOpen) {
             closeSheet();
         } else if (zone == Z_DRAWER) {
@@ -1887,6 +1929,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        if (dockEditing) {
+            if (dx != 0 && !shelf.isEmpty()) {
+                int next = Math.max(0, Math.min(shelf.size() - 1, shelfIndex + dx));
+                if (next != shelfIndex) {
+                    java.util.Collections.swap(shelf, shelfIndex, next);
+                    shelfIndex = next;
+                    layoutShelf();
+                    retarget(false);
+                    tilesDirty = true;
+                    tiles.invalidate();
+                    click.move();
+                }
+            }
+            return;
+        }
         if (sheetOpen) {
             moveGrid(dx, dy);
             return;
@@ -2343,10 +2400,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawLightTop(Canvas c) {
         applyTone();
-        String hello = Ui.tr("Para você", "For You");
-        c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
-        // The time, centered at the top, in the same font as the rest.
-        c.drawText(clockText, w / 2f, L_TITLE_BASE * k, lClock);
+        // Navigation tabs replace the large heading; compact clock near the right.
+        c.drawText(clockText, 1110 * k, L_BUTTON_CY * k + Ui.halfCap(lClock), lClock);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
