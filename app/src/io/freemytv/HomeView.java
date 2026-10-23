@@ -26,6 +26,9 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
+import android.graphics.Outline;
+import android.webkit.WebView;
 import android.view.accessibility.AccessibilityNodeProvider;
 
 import org.json.JSONArray;
@@ -105,6 +108,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Recs recs;
     private final Click click;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private static final long TRAILER_DELAY_MS = 5000;
+    private WebView trailerView;
+    private Runnable pendingTrailer;
+    private int trailerGeneration;
+    private String trailerKey;
     private final SharedPreferences ui;
     private final TvInputManager tvInputs;
     private final Spoken spoken = new Spoken(this, new Spoken.Source() {
@@ -337,6 +345,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             addView(v);
         }
         setContentDescription("Free My TV");
+        trailerView = new WebView(a);
+        trailerView.setBackgroundColor(0xFF000000);
+        trailerView.setFocusable(false);
+        trailerView.setFocusableInTouchMode(false);
+        trailerView.setClickable(false);
+        trailerView.setVisibility(GONE);
+        trailerView.getSettings().setJavaScriptEnabled(true);
+        trailerView.getSettings().setDomStorageEnabled(true);
+        trailerView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        trailerView.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override public void onReceivedError(WebView view, android.webkit.WebResourceRequest request,
+                    android.webkit.WebResourceError error) {
+                if (request.isForMainFrame()) stopTrailer();
+            }
+        });
+        trailerView.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 18 * k);
+            }
+        });
+        trailerView.setClipToOutline(true);
+        addView(trailerView);
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < TOP; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
@@ -383,9 +413,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         invalidateAll();
         Choreographer.getInstance().postFrameCallback(this);
         spoken.readAgain();
+        scheduleTrailer();
     }
 
     void pause() {
+        stopTrailer();
         if (!running) return;
         running = false;
         Choreographer.getInstance().removeFrameCallback(this);
@@ -398,6 +430,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void destroy() {
         pause();
         click.release();
+        trailerView.destroy();
     }
 
     /** Starting state (Home pressed while the home screen is showing): first app focused, drawer and sheet closed. */
@@ -476,6 +509,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
+        measure(trailerView, width, height);
         setMeasuredDimension(width, height);
     }
 
@@ -496,6 +530,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setPivotX(width / 2f);
         sheetLayer.setPivotY(height / 2f);
         place(toastLayer, (width - toastLayer.getMeasuredWidth()) / 2, 0);
+        trailerView.layout(0, 0, 1, 1);
     }
 
     private static void place(View v, int x, int y) {
@@ -612,6 +647,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             carDirty = false;
             layoutCarousel();
         }
+        positionTrailer();
         boolean topMoving = step(topFocus, dt), cardsMoving = step(cardFocus, dt) | carMoving;
         if (topMoving) status.invalidate();
         heroMoving |= topMoving | cardsMoving;
@@ -1603,6 +1639,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         heroDirty |= snap || heroChanged;
         drawerDirty |= snap || drawerChanged;
         spoken.focusMoved();
+        scheduleTrailer();
     }
 
     /** Aims a group's springs (only `focused` at 1); returns true if any target changed. */
@@ -2259,6 +2296,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(tab == 0 ? 0 : Math.min(cardIndex, cards.size() - 1)));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
+        scheduleTrailer();
         spoken.focusMoved();    // new picks under the focused card
     }
 
@@ -2561,6 +2599,58 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.78f);
         c.drawRoundRect(tmp, r * 0.62f, r * 0.62f, fill);
         c.restore();
+    }
+
+
+    private void scheduleTrailer() {
+        stopTrailer();
+        if (!running || zone != Z_CARDS || sheetOpen || drawerOpen || cardIndex >= cards.size()) return;
+        final Recs.Pick pick = cards.get(cardIndex);
+        final int generation = trailerGeneration;
+        final String key = Recs.key(pick);
+        pendingTrailer = () -> {
+            pendingTrailer = null;
+            if (generation != trailerGeneration || !stillSelected(key)) return;
+            recs.findTrailer(pick, youtubeId -> {
+                if (generation != trailerGeneration || !stillSelected(key) || youtubeId == null) return;
+                trailerKey = key;
+                trailerView.setVisibility(VISIBLE);
+                positionTrailer();
+                trailerView.loadUrl("https://www.youtube-nocookie.com/embed/" + youtubeId
+                        + "?autoplay=1&mute=0&playsinline=1&controls=0&rel=0");
+            });
+        };
+        handler.postDelayed(pendingTrailer, TRAILER_DELAY_MS);
+    }
+
+    private boolean stillSelected(String key) {
+        return running && zone == Z_CARDS && !sheetOpen && !drawerOpen
+                && cardIndex < cards.size() && key.equals(Recs.key(cards.get(cardIndex)));
+    }
+
+    private void stopTrailer() {
+        trailerGeneration++;
+        if (pendingTrailer != null) handler.removeCallbacks(pendingTrailer);
+        pendingTrailer = null;
+        if (trailerKey != null) {
+            trailerView.setVisibility(GONE);
+            trailerView.loadUrl("about:blank");
+            trailerKey = null;
+        }
+    }
+
+    private void positionTrailer() {
+        if (trailerKey == null || cardIndex >= cards.size() || trailerView.getVisibility() != VISIBLE) return;
+        RectF base = cardRects[cardIndex];
+        float v = cardFocus[cardIndex].value;
+        float scale = 1 + 0.05f * v;
+        float width = base.width() * scale, height = base.height() * scale;
+        int x = Math.round(base.centerX() - width / 2f);
+        int y = Math.round(base.centerY() - 6 * k * v - height / 2f);
+        int rw = Math.max(1, Math.round(width)), rh = Math.max(1, Math.round(height));
+        if (trailerView.getWidth() != rw || trailerView.getHeight() != rh
+                || trailerView.getLeft() != x || trailerView.getTop() != y)
+            trailerView.layout(x, y, x + rw, y + rh);
     }
 
     /** Carousel: the background follows the selected title. */
