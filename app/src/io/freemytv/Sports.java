@@ -339,7 +339,7 @@ final class Sports {
         long now = System.currentTimeMillis();
         boolean close = false;     // something is about to start or on: look more often (scores, finished matches)
         for (Event e : events) close |= now >= e.start - 15 * 60_000L && now < e.start + e.minutes * 60_000L;
-        long every = events.isEmpty() ? 2 * 60_000L : close ? FAST : EVERY;    // nothing yet: keep trying
+        long every = events.isEmpty() ? 10 * 60_000L : close ? FAST : EVERY;    // nothing yet: try again, not too often
         if (now - fetchedAt < every && now >= fetchedAt) return;
         fetching = true;
         io.execute(() -> {
@@ -500,7 +500,7 @@ final class Sports {
         for (Event e : out) if (e.sport == SERIE_A || e.sport == CHAMPIONS) footballMissing = false;
         String[] serieA = soccer && footballMissing ? leagueInfo(4332, "serie a") : new String[] {"", ""};
         String[] champions = soccer && footballMissing ? leagueInfo(4480, "champions") : new String[] {"", ""};
-        for (int d = 0; d < 5; d++) {
+        for (int d = 0; d < 4; d++) {      // today and the next 3 days (4 requests per sport: the free key has a rate limit)
             long when = System.currentTimeMillis() + d * 86_400_000L;
             JSONObject o = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/eventsday.php?d=" + day(when)
                     + "&s=" + sport, null));
@@ -977,7 +977,20 @@ final class Sports {
     /** TheSportsDB's free key ("3" was the old one; "123" is the current one, v1 only). */
     private static final String SPORTSDB_KEY = "123";
 
+    /** TheSportsDB answered 429 (too many requests): no more requests to it until then. */
+    private static volatile long sportsDbPausedUntil;
+
     private static String get(String url, String token) throws IOException {
+        boolean sportsDb = url.contains("thesportsdb.com");
+        if (sportsDb) {
+            long wait = sportsDbPausedUntil - System.currentTimeMillis();
+            if (wait > 0) throw new IOException("TheSportsDB paused for " + (wait / 60_000 + 1) + " min (too many requests)");
+            try {
+                Thread.sleep(400);      // spread the requests out: its free key allows only a few per second
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(10000);
@@ -987,6 +1000,7 @@ final class Sports {
         if (token != null) c.setRequestProperty("X-Auth-Token", token);
         try {
             int code = c.getResponseCode();
+            if (code == 429 && sportsDb) sportsDbPausedUntil = System.currentTimeMillis() + 15 * 60_000L;
             if (code != 200) throw new IOException("HTTP " + code + reason(c));
             return read(c.getInputStream());
         } finally {
