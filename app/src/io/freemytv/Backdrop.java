@@ -65,9 +65,10 @@ final class Backdrop {
             // The tall cards show the title's poster when it has one; the wide one, its photo.
             // The wide card shows TMDB's own horizontal cover, cropped a little above the middle (faces and titles
             // sit high); the tall ones, its poster.
-            // Top 10: the selected card is a 16:9-ish "feature" instead of the wide one.
-            Bitmap wide = top ? null : card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f, logoWide, true);
-            Bitmap feature = top ? card(out, FEATURE_W, FEATURE_H, 0.38f, logoWide, true) : null;
+            // The selected card of the home screen's row is a 16:9-ish "feature" (with the logo where it shows whole);
+            // for For You titles the same picture is also the wide one (the scoreboard's place without a match).
+            Bitmap feature = card(top ? out : cover != null ? cover : out, FEATURE_W, FEATURE_H, 0.38f, logoWide, true);
+            Bitmap wide = top ? null : feature;
             Bitmap tall = card(poster != null ? poster : out, TALL_W, TALL_H, 0.4f, logoTall, false);
             if (poster != null) poster.recycle();
             if (cover != null) cover.recycle();

@@ -91,7 +91,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
     private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
     private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 84;
-    private static final float L_PLATTER_TOP = 878, L_TILE_H = 84, L_SHELF_PAD = 22;
+    private static final float L_PLATTER_TOP = 908, L_TILE_H = 80, L_SHELF_PAD = 20;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
     private static final String[] TABS_EN = {"Explore", "Movies", "Shows"};
@@ -99,13 +99,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final String[] TABS_IT = {"Esplora", "Film", "Serie TV"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
-    private static final float RAIL_HEAD = 46, RAIL_ROW_H = 72, RAIL_MORE_H = 52, RAIL_GAP = 4;
+    private static final float RAIL_HEAD = 46, RAIL_ROW_H = 66, RAIL_MORE_H = 48, RAIL_GAP = 4;
     // Matchday (the design of the HTML preview): the time, date and weather in one line at the top; the scoreboard and
     // the "Next" list; the chips (For You, Movies, Shows) with the row of posters below, the selected one opened up into
     // its cover; the shelf at the bottom. Always the dark look.
-    private static final float M_HEADER_BASE = 104, M_SPORT_TOP = 140, M_SPORT_H = 408, M_HERO_W = 1240, M_RAIL_X = 1356;
-    private static final float M_CHIPS_TOP = 568, M_CHIPS_H = 48, M_ROW_TOP = 636, M_ROW_H = 216;
-    private static final float M_POSTER_W = 144, M_COVER_W = 384, M_ROW_GAP = 20;
+    private static final float M_HEADER_BASE = 104, M_SPORT_TOP = 140, M_SPORT_H = 380, M_HERO_W = 1240, M_RAIL_X = 1356;
+    private static final float M_CHIPS_TOP = 544, M_CHIPS_H = 48, M_ROW_TOP = 608, M_ROW_H = 256;
+    private static final float M_POSTER_W = 171, M_COVER_W = 455, M_ROW_GAP = 22;
     private static final int Z_SPORT = 6, Z_CHIPS = 7;
     private static final boolean ALWAYS_DARK = true;
 
@@ -502,8 +502,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(status, Math.round(1160 * kk), Math.round(240 * kk));
         // Sized to what they draw (the glass and its shadow; the grown tiles and their shadows): smaller layers are
         // cheaper for the GPU to composite on every frame of the drawer animation.
-        measure(platter, width, Math.round(250 * kk));
-        measure(tiles, width, Math.round(210 * kk));
+        measure(platter, width, Math.round(230 * kk));
+        measure(tiles, width, Math.round(200 * kk));
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
@@ -520,8 +520,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sky.layout(0, 0, width, height);
         place(heroLayer, 0, 0);
         place(status, width - status.getMeasuredWidth(), 0);
-        place(platter, 0, Math.round(830 * kk));
-        place(tiles, 0, Math.round(850 * kk));
+        place(platter, 0, Math.round(850 * kk));
+        place(tiles, 0, Math.round(870 * kk));
         place(drawerLayer, 0, Math.round(470 * kk));
         sheetLayer.layout(0, 0, width, height);
         sheetLayer.setPivotX(width / 2f);

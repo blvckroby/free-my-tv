@@ -494,6 +494,12 @@ final class Sports {
         boolean tennis = sport.equals("Tennis"), soccer = sport.equals("Soccer");
         String[] moto = sport.equals("Motorsport") ? leagueInfo(4407, "moto") : new String[] {"", ""};
         String[] europa = soccer ? leagueInfo(4481, "europa") : new String[] {"", ""};
+        // Serie A and the Champions League come from football-data (with the crests); when it gave none (no key, or
+        // it refused), they come from this listing too, so the scoreboard still has them.
+        boolean footballMissing = true;
+        for (Event e : out) if (e.sport == SERIE_A || e.sport == CHAMPIONS) footballMissing = false;
+        String[] serieA = soccer && footballMissing ? leagueInfo(4332, "serie a") : new String[] {"", ""};
+        String[] champions = soccer && footballMissing ? leagueInfo(4480, "champions") : new String[] {"", ""};
         for (int d = 0; d < 5; d++) {
             long when = System.currentTimeMillis() + d * 86_400_000L;
             JSONObject o = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/eventsday.php?d=" + day(when)
@@ -504,18 +510,26 @@ final class Sports {
                 String league = j.optString("strLeague"), title = j.optString("strEvent");
                 String lower = league.toLowerCase(Locale.ROOT);
                 String text = (league + " " + title + " " + j.optString("strRound")).toLowerCase(Locale.ROOT);
-                if (soccer ? !(lower.contains("europa league") && !lower.contains("conference") && !lower.contains("women"))
-                        : tennis ? !(text.contains("final") && (text.contains("atp") || text.contains("wta")
-                        || text.contains("grand slam"))) : !lower.contains("motogp")) continue;
+                int kind = -1;
+                if (soccer) {
+                    boolean women = lower.contains("women") || lower.contains("conference");
+                    if (!women && lower.contains("europa league")) kind = EUROPA;
+                    else if (!women && footballMissing && lower.contains("italian serie a")) kind = SERIE_A;
+                    else if (!women && footballMissing && lower.contains("uefa champions league")) kind = CHAMPIONS;
+                } else if (tennis) {
+                    if (text.contains("final") && (text.contains("atp") || text.contains("wta") || text.contains("grand slam"))) kind = TENNIS;
+                } else if (lower.contains("motogp")) {
+                    kind = MOTO;
+                }
+                if (kind < 0) continue;
                 long start = utc(j.optString("strTimestamp"));
                 if (start == 0) continue;
-                Event e = event(soccer ? EUROPA : tennis ? TENNIS : MOTO, start,
-                        soccer ? "Europa League" : tennis ? "Tennis" : "MotoGP", title);
+                Event e = event(kind, start, kind == SERIE_A ? "Serie A" : kind == CHAMPIONS ? "Champions League"
+                        : kind == EUROPA ? "Europa League" : tennis ? "Tennis" : "MotoGP", title);
                 e.minutes = soccer ? 115 : tennis ? 180 : 75;
-                String[] info = soccer ? europa : moto;
+                String[] info = kind == SERIE_A ? serieA : kind == CHAMPIONS ? champions : soccer ? europa : moto;
                 e.logoComp = !info[0].isEmpty() ? info[0] : clean(j.optString("strLeagueBadge"));
-                e.art = soccer ? art(Config.EUROPA_ART, "asset:sports/europa.jpg")
-                        : !info[1].isEmpty() ? info[1] : clean(j.optString("strThumb"));
+                e.art = soccer ? "" : !info[1].isEmpty() ? info[1] : clean(j.optString("strThumb"));   // football: the app's picture
                 if (soccer || tennis) {
                     e.home = j.optString("strHomeTeam");
                     e.away = j.optString("strAwayTeam");
