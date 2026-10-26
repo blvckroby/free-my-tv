@@ -41,7 +41,7 @@ final class SportsView extends View {
     private boolean loading = true;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), logoPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final PorterDuffColorFilter white = new PorterDuffColorFilter(0xFFFFFFFF, PorterDuff.Mode.SRC_IN);
-    private final TextPaint title, date, header, time, name, dim, hint;
+    private final TextPaint title, date, header, time, name, dim, hint, comp;
     private final RectF box = new RectF(), tmp = new RectF();
     private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm", java.util.Locale.US);
     private Shader background;
@@ -60,6 +60,7 @@ final class SportsView extends View {
         name = new TextPaint(Ui.text(Ui.semibold, 32 * k, 0xFFFFFFFF));
         dim = new TextPaint(Ui.text(Ui.medium, 28 * k, 0x99FFFFFF));
         hint = new TextPaint(Ui.text(Ui.medium, 26 * k, 0x80FFFFFF));
+        comp = new TextPaint(Ui.text(Ui.semibold, 19 * k, 0x99FFFFFF));
         reload();
     }
 
@@ -73,21 +74,12 @@ final class SportsView extends View {
         loading = list == null;
         rows.clear();
         if (list != null) {
-            for (int sport : Sports.ORDER) {
-                Row h = null;
-                for (Sports.Event e : list) {
-                    if (e.sport != sport) continue;
-                    if (h == null) {
-                        h = new Row();
-                        h.header = e.competition;
-                        h.sport = sport;
-                        rows.add(h);
-                    }
-                    Row r = new Row();
-                    r.event = e;
-                    r.sport = sport;
-                    rows.add(r);
-                }
+            // One list in start order (the agenda comes sorted by time); each row says its competition.
+            for (Sports.Event e : list) {
+                Row r = new Row();
+                r.event = e;
+                r.sport = e.sport;
+                rows.add(r);
             }
         }
         selected = Math.min(selected, Math.max(0, rows.size() - 1));
@@ -201,7 +193,7 @@ final class SportsView extends View {
             float rh = r.header != null ? 74 * k : 92 * k;
             if (y + rh > top - 10 && y < h) {
                 if (r.header != null) drawHeader(c, r, left, y, rh);
-                else drawEvent(c, r.event, left, right, y, rh, i == selected);
+                else drawEvent(c, r, left, right, y, rh, i == selected);
             }
             y += rh;
         }
@@ -235,14 +227,20 @@ final class SportsView extends View {
         }
     }
 
-    private void drawEvent(Canvas c, Sports.Event e, float left, float right, float y, float rh, boolean on) {
+    private void drawEvent(Canvas c, Row r, float left, float right, float y, float rh, boolean on) {
+        Sports.Event e = r.event;
         if (on) {
             box.set(left - 14 * k, y + 4 * k, right + 14 * k, y + rh - 4 * k);
             fill.setColor(0x2EFFFFFF);
             c.drawRoundRect(box, 20 * k, 20 * k, fill);
         }
         float mid = y + rh / 2 + Ui.halfCap(time);
-        c.drawText(clock.format(new Date(e.start)), left + 6 * k, mid, time);
+        // The competition's color and name under the time (the list is by time, not grouped by competition).
+        fill.setColor(0xFF000000 | accent(r.sport));
+        box.set(left - 4 * k, y + 22 * k, left + 2 * k, y + rh - 22 * k);
+        c.drawRoundRect(box, 3 * k, 3 * k, fill);
+        c.drawText(clock.format(new Date(e.start)), left + 14 * k, mid - 12 * k, time);
+        c.drawText(TextUtils.ellipsize(e.competition, comp, 150 * k, TextUtils.TruncateAt.END).toString(), left + 14 * k, mid + 20 * k, comp);
         float x = left + 170 * k, max = right - x;
         if (!e.home.isEmpty() && !e.away.isEmpty()) {
             float half = max / 2 - 40 * k;

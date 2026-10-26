@@ -131,7 +131,7 @@ final class Sports {
         return best == null ? null : pickFor(best, now);
     }
 
-    /** The "Next" list beside the scoreboard: up to `max` events of the coming days, in the scoreboard's order. */
+    /** The "Next" list beside the scoreboard: up to `max` events of the coming days, the earliest first. */
     List<Recs.Pick> next(Event exclude, int max) {
         List<Recs.Pick> out = new ArrayList<>();
         if (!Config.SPORTS) return out;
@@ -142,7 +142,9 @@ final class Sports {
             if (e == exclude || e.done || now >= e.start + e.minutes * 60_000L || e.start > now + 4 * 86_400_000L) continue;
             list.add(e);
         }
-        java.util.Collections.sort(list, (a, b) -> a == b ? 0 : before(a, b, now, italy) ? -1 : 1);
+        // By start time; at the same time, Italian clubs and players first (with the screen in Italian).
+        java.util.Collections.sort(list, (a, b) -> a.start != b.start ? Long.compare(a.start, b.start)
+                : Integer.compare(italy ? b.italian : 0, italy ? a.italian : 0));
         for (int i = 0; i < list.size() && out.size() < max; i++) {
             Recs.Pick p = pickFor(list.get(i), now);
             p.kind = "row";
@@ -662,10 +664,9 @@ final class Sports {
 
     // MARK: - The day's agenda (the Sport button)
 
-    /** Names of the competitions, by sport id, and the order they are listed in. */
+    /** Names of the competitions, by sport id. */
     static final String[] NAMES = {"Serie A", "Champions League", "Europa League", "Formula 1", "MotoGP", "Tennis",
             "Premier League", "LaLiga", "Bundesliga", "Ligue 1"};
-    static final int[] ORDER = {SERIE_A, CHAMPIONS, EUROPA, PREMIER, LALIGA, BUNDES, LIGUE1, F1, MOTO, TENNIS};
 
     private final ExecutorService agendaIo = Executors.newSingleThreadExecutor();
     private final java.util.Map<String, List<Event>> agendas = new java.util.HashMap<>();
