@@ -90,8 +90,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
     // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
     private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
-    private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 84;
-    private static final float L_PLATTER_TOP = 900, L_TILE_H = 92, L_SHELF_PAD = 20;
+    private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 74;
+    private static final float L_PLATTER_TOP = 886, L_TILE_H = 110, L_SHELF_PAD = 20;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
     private static final String[] TABS_EN = {"Explore", "Movies", "Shows"};
@@ -99,13 +99,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final String[] TABS_IT = {"Esplora", "Film", "Serie TV"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
-    private static final float RAIL_HEAD = 46, RAIL_ROW_H = 66, RAIL_MORE_H = 48, RAIL_GAP = 4;
+    private static final float RAIL_HEAD = 40, RAIL_ROW_H = 62, RAIL_MORE_H = 44, RAIL_GAP = 4;
     // Matchday (the design of the HTML preview): the time, date and weather in one line at the top; the scoreboard and
     // the "Next" list; the chips (For You, Movies, Shows) with the row of posters below, the selected one opened up into
     // its cover; the shelf at the bottom. Always the dark look.
-    private static final float M_HEADER_BASE = 104, M_SPORT_TOP = 140, M_SPORT_H = 380, M_HERO_W = 1240, M_RAIL_X = 1356;
-    private static final float M_CHIPS_TOP = 544, M_CHIPS_H = 48, M_ROW_TOP = 608, M_ROW_H = 256;
-    private static final float M_POSTER_W = 171, M_COVER_W = 455, M_ROW_GAP = 22;
+    private static final float M_HEADER_BASE = 94, M_SPORT_TOP = 126, M_SPORT_H = 344, M_HERO_W = 1240, M_RAIL_X = 1356;
+    private static final float M_CHIPS_TOP = 494, M_CHIPS_H = 46, M_ROW_TOP = 556, M_ROW_H = 300;
+    private static final float M_POSTER_W = 200, M_COVER_W = 533, M_ROW_GAP = 24;
     private static final int Z_SPORT = 6, Z_CHIPS = 7;
     private static final boolean ALWAYS_DARK = true;
 
@@ -502,8 +502,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(status, Math.round(1160 * kk), Math.round(240 * kk));
         // Sized to what they draw (the glass and its shadow; the grown tiles and their shadows): smaller layers are
         // cheaper for the GPU to composite on every frame of the drawer animation.
-        measure(platter, width, Math.round(230 * kk));
-        measure(tiles, width, Math.round(200 * kk));
+        measure(platter, width, Math.round(240 * kk));
+        measure(tiles, width, Math.round(230 * kk));
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
@@ -520,8 +520,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sky.layout(0, 0, width, height);
         place(heroLayer, 0, 0);
         place(status, width - status.getMeasuredWidth(), 0);
-        place(platter, 0, Math.round(850 * kk));
-        place(tiles, 0, Math.round(870 * kk));
+        place(platter, 0, Math.round(840 * kk));
+        place(tiles, 0, Math.round(850 * kk));
         place(drawerLayer, 0, Math.round(470 * kk));
         sheetLayer.layout(0, 0, width, height);
         sheetLayer.setPivotX(width / 2f);
@@ -2653,14 +2653,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawRoundRect(area, r, r, fill);
             }
         }
-        float pad = 44 * k;
+        float pad = 44 * k, mx = area.centerX(), my = area.centerY();
+        // The competition at the top center, in its own colors (the person's logo or the one found online).
         Bitmap comp = sports.bitmap(p.logoComp, null);
+        float logoY = area.top + 24 * k + 22 * k;
         if (comp != null) {
-            float boxW = 240 * k, boxH = 64 * k, scale = Math.min(boxW / comp.getWidth(), boxH / comp.getHeight());
-            drawLogo(c, comp, area.left + pad + comp.getWidth() * scale / 2, area.top + pad + boxH / 2, boxW, boxH,
-                    !p.logoComp.startsWith("asset:"));
+            drawLogo(c, comp, mx, logoY, 220 * k, 44 * k, false);
         } else {
-            c.drawText(p.label, area.left + pad, area.top + pad + 32 * k + Ui.halfCap(lSportLabel), lSportLabel);
+            lSportLabel.setTextAlign(Paint.Align.CENTER);
+            c.drawText(p.label, mx, logoY + Ui.halfCap(lSportLabel), lSportLabel);
+            lSportLabel.setTextAlign(Paint.Align.LEFT);
         }
         if (p.live) {
             float ph = 38 * k, pw = lLive.measureText("LIVE") + 48 * k, right = area.right - pad, top = area.top + pad + 6 * k;
@@ -2675,26 +2677,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(p.day, area.right - pad, area.top + pad + 25 * k + Ui.halfCap(lSportDay), lSportDay);
         }
         if (!p.home.isEmpty() && !p.away.isEmpty()) {
-            float size = 170 * k, cy = area.top + 120 * k + size / 2;
+            // Crests with the names under them, and the time between: one block, centered in the card's height.
+            float size = 170 * k, cy = my - 18 * k;
             float leftX = area.left + 220 * k, rightX = area.right - 220 * k;
             drawSide(c, sports.bitmap(p.logoHome, p.home), p.home, leftX, cy, size);
             drawSide(c, sports.bitmap(p.logoAway, p.away), p.away, rightX, cy, size);
             TextPaint np = new TextPaint(lSportTeam);
-            float maxName = 330 * k, nameBase = cy + size / 2 + 52 * k;
+            float maxName = 330 * k, nameBase = cy + size / 2 + 46 * k;
             c.drawText(TextUtils.ellipsize(p.home, np, maxName, TextUtils.TruncateAt.END).toString(), leftX, nameBase, lSportTeam);
             c.drawText(TextUtils.ellipsize(p.away, np, maxName, TextUtils.TruncateAt.END).toString(), rightX, nameBase, lSportTeam);
-            float mx = area.centerX();
             boolean word = !p.board.isEmpty() && !Character.isDigit(p.board.charAt(0));
-            c.drawText(p.boardTop, mx, area.top + 158 * k, lBoardLine);
-            c.drawText(p.board, mx, area.top + (word ? 268 : 288) * k, word ? lBoardWord : lBoard);
-            if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, mx, area.top + 340 * k, lBoardLine);
+            c.drawText(p.boardTop, mx, cy - 62 * k, lBoardLine);
+            c.drawText(p.board, mx, cy + (word ? 30 : 46) * k, word ? lBoardWord : lBoard);
+            if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, mx, cy + 94 * k, lBoardLine);
             return;
         }
         // A race (or an event without two sides): the name on up to two lines, then the session and place.
         Paint face = p.face == 1 ? lSportF1 : p.face == 2 ? lSportMgp : lSportTitle;
         float maxW = area.width() * 0.56f;
         raceLines(p.face != 0 ? p.raceName.toUpperCase(Ui.locale()) : p.raceName, face, maxW);
-        float lh = face.getTextSize() * 1.1f, y = area.top + 150 * k + face.getTextSize() * 0.8f;
+        // The name's lines and the session under them, centered in the card's height; the time at the right.
+        int lines = (raceLines[0] != null && !raceLines[0].isEmpty() ? 1 : 0) + (raceLines[1] != null && !raceLines[1].isEmpty() ? 1 : 0);
+        float lh = face.getTextSize() * 1.1f, block = lines * lh + 44 * k;
+        float y = my - block / 2 + face.getTextSize() * 0.8f;
         for (String line : raceLines) {
             if (line == null || line.isEmpty()) continue;
             c.drawText(line, area.left + pad, y, face);
@@ -2707,8 +2712,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             sx += 62 * k;
         }
         if (!p.raceLine.isEmpty()) c.drawText(p.raceLine, sx, sy, lSportWhen);
-        c.drawText(p.board, area.right - pad, area.top + 250 * k, lBoardRight);
-        if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, area.right - pad, area.top + 296 * k, lBoardLineRight);
+        c.drawText(p.board, area.right - pad, my + 30 * k, lBoardRight);
+        if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, area.right - pad, my + 76 * k, lBoardLineRight);
     }
 
     /** Splits a race's name into at most two lines that fit `width` (the second is shortened if needed); kept until it changes. */
