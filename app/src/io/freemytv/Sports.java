@@ -183,6 +183,20 @@ final class Sports {
         return out;
     }
 
+    /** The calendar's big card for one event (its scoreboard as of now). */
+    Recs.Pick card(Event e) {
+        return pickFor(e, System.currentTimeMillis());
+    }
+
+    /** A team's crest: the person's own file first, then `url`. */
+    String crest(String team, String url) {
+        return localCrestOr(team, url);
+    }
+
+    static int accent(int sport) {
+        return sport >= 0 && sport < ACCENT.length ? ACCENT[sport] : 0xFF2E8B57;
+    }
+
     /** The card for one event, with the scoreboard's lines worked out for `now`. */
     private Recs.Pick pickFor(Event best, long now) {
         String[] opener = opener();
