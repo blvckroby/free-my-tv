@@ -63,10 +63,19 @@ final class Sports {
     private volatile List<Event> events = new ArrayList<>();
     private volatile long fetchedAt;
     private volatile boolean fetching;
+    /** A source failed on the last look (no internet, a refusal): look again sooner. */
+    private volatile boolean partial;
+    /** Bump when the sources or how they are read change (the saved events are dropped and fetched again). */
+    private static final int SOURCES_VERSION = 2;
 
     private Sports(Context c) {
         context = c;
         cache = c.getSharedPreferences("sports", Context.MODE_PRIVATE);
+        // A new football key or a new way of reading the sources: what was saved is stale, fetch again right away.
+        String stamp = SOURCES_VERSION + ":" + Config.FOOTBALL_KEY.trim().hashCode();
+        if (!stamp.equals(cache.getString("stamp", ""))) {
+            cache.edit().remove("events2").remove("at2").putString("stamp", stamp).apply();
+        }
         try {
             fetchedAt = cache.getLong("at2", 0);
             JSONArray a = new JSONArray(cache.getString("events2", "[]"));
@@ -339,10 +348,11 @@ final class Sports {
         long now = System.currentTimeMillis();
         boolean close = false;     // something is about to start or on: look more often (scores, finished matches)
         for (Event e : events) close |= now >= e.start - 15 * 60_000L && now < e.start + e.minutes * 60_000L;
-        long every = events.isEmpty() ? 10 * 60_000L : close ? FAST : EVERY;    // nothing yet: try again, not too often
+        long every = close ? FAST : events.isEmpty() || partial ? 10 * 60_000L : EVERY;   // nothing yet, or a source failed
         if (now - fetchedAt < every && now >= fetchedAt) return;
         fetching = true;
         io.execute(() -> {
+            boolean failed = false;
             try {
             List<Event> found = new ArrayList<>();
             long from = System.currentTimeMillis();
@@ -352,18 +362,21 @@ final class Sports {
                     football(found, key, from);
                 } catch (Exception e) {
                     AppLog.w("football: " + e.getMessage());
+                    failed = true;
                 }
             }
             try {
                 formula1(found);
             } catch (Exception e) {
                 AppLog.w("formula 1: " + e.getMessage());
+                failed = true;
             }
             for (String sport : new String[] {"Motorsport", "Tennis", "Soccer"}) {
                 try {
                     sportsDb(found, sport);
                 } catch (Exception e) {
                     AppLog.w("sports (" + sport + "): " + e.getMessage());
+                    failed = true;
                 }
             }
             int withLogos = 0;
@@ -377,6 +390,7 @@ final class Sports {
             fetchedAt = System.currentTimeMillis();
             main.post(() -> Recs.get(context).changed());
             } finally {
+                partial = failed;
                 fetching = false;
                 fetchedAt = Math.max(fetchedAt, System.currentTimeMillis());
             }
