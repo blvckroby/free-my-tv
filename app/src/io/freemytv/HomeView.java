@@ -639,15 +639,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lSportName = Ui.text(Ui.semibold, 27 * k, 0xFFFFFFFF);
         lSportName.setTextAlign(Paint.Align.CENTER);
         // The scoreboard (matchday): the kick-off time or the minute, big; the lines above and below it.
-        lBoard = Ui.numbers(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
+        lBoard = Ui.numbers(Ui.displaySemibold, 66 * k, 0xFFFFFFFF);
         lBoard.setLetterSpacing(-0.035f);
         lBoard.setTextAlign(Paint.Align.CENTER);
-        lBoardWord = Ui.text(Ui.displaySemibold, 54 * k, 0xFFFFFFFF);
+        lBoardWord = Ui.text(Ui.displaySemibold, 44 * k, 0xFFFFFFFF);
         lBoardWord.setLetterSpacing(-0.02f);
         lBoardWord.setTextAlign(Paint.Align.CENTER);
         lBoardLine = Ui.text(Ui.medium, 24 * k, 0xD9FFFFFF);
         lBoardLine.setTextAlign(Paint.Align.CENTER);
-        lBoardRight = Ui.numbers(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
+        lBoardRight = Ui.numbers(Ui.displaySemibold, 66 * k, 0xFFFFFFFF);
         lBoardRight.setLetterSpacing(-0.035f);
         lBoardRight.setTextAlign(Paint.Align.RIGHT);
         lBoardLineRight = Ui.text(Ui.medium, 24 * k, 0xD9FFFFFF);
