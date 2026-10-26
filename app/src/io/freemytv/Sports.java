@@ -496,7 +496,7 @@ final class Sports {
         String[] europa = soccer ? leagueInfo(4481, "europa") : new String[] {"", ""};
         for (int d = 0; d < 5; d++) {
             long when = System.currentTimeMillis() + d * 86_400_000L;
-            JSONObject o = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=" + day(when)
+            JSONObject o = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/eventsday.php?d=" + day(when)
                     + "&s=" + sport, null));
             JSONArray list = o.optJSONArray("events");
             for (int i = 0; list != null && i < list.length(); i++) {
@@ -585,7 +585,7 @@ final class Sports {
         if (saved != null && !saved.equals("|") && System.currentTimeMillis() - cache.getLong(key + "At", 0) < WEEK) return split(saved);
         String logo = "", art = "";
         try {
-            JSONArray leagues = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/3/lookupleague.php?id=" + id, null))
+            JSONArray leagues = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/lookupleague.php?id=" + id, null))
                     .optJSONArray("leagues");
             JSONObject l = leagues == null ? null : leagues.optJSONObject(0);
             if (l != null && l.optString("strLeague").toLowerCase(Locale.ROOT).contains(must)) {
@@ -618,7 +618,7 @@ final class Sports {
         if (saved != null && !saved.isEmpty()) return saved;
         String badge = "";
         try {
-            JSONArray teams = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t="
+            JSONArray teams = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/searchteams.php?t="
                     + java.net.URLEncoder.encode(name, "UTF-8"), null)).optJSONArray("teams");
             for (int i = 0; teams != null && i < teams.length() && badge.isEmpty(); i++) {
                 JSONObject t = teams.getJSONObject(i);
@@ -793,7 +793,7 @@ final class Sports {
 
     /** One day of TheSportsDB's listing for a sport: the leagues in LEAGUES, MotoGP, ATP and WTA tennis. */
     private void dayListing(List<Event> out, String sport, long day, boolean footballKnown) throws Exception {
-        JSONArray list = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=" + day(day) + "&s=" + sport, null))
+        JSONArray list = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY + "/eventsday.php?d=" + day(day) + "&s=" + sport, null))
                 .optJSONArray("events");
         int tennisCount = 0;
         for (int i = 0; list != null && i < list.length(); i++) {
@@ -960,24 +960,50 @@ final class Sports {
 
     // MARK: - Helpers
 
+    /** TheSportsDB's free key ("3" was the old one; "123" is the current one, v1 only). */
+    private static final String SPORTSDB_KEY = "123";
+
     private static String get(String url, String token) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(10000);
         c.setRequestProperty("Accept", "application/json");
+        // Sites behind Cloudflare (TheSportsDB) answer 403 to Android's own "Dalvik" client; ask like a TV browser.
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36");
         if (token != null) c.setRequestProperty("X-Auth-Token", token);
         try {
-            if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode());
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            try (InputStream in = c.getInputStream()) {
-                byte[] buffer = new byte[8192];
-                int n;
-                while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
-            }
-            return out.toString(StandardCharsets.UTF_8.name());
+            int code = c.getResponseCode();
+            if (code != 200) throw new IOException("HTTP " + code + reason(c));
+            return read(c.getInputStream());
         } finally {
             c.disconnect();
         }
+    }
+
+    /** The server's own words for a refusal (football-data says why), for the log; never the request or its key. */
+    private static String reason(HttpURLConnection c) {
+        try (InputStream err = c.getErrorStream()) {
+            if (err == null) return "";
+            String body = read(err);
+            String message = "";
+            try {
+                message = new JSONObject(body).optString("message", "");
+            } catch (Exception ignored) {
+            }
+            if (message.isEmpty()) message = body.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+            return message.isEmpty() ? "" : " (" + (message.length() > 160 ? message.substring(0, 160) + "…" : message) + ")";
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static String read(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int n;
+        while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        in.close();
+        return out.toString(StandardCharsets.UTF_8.name());
     }
 
     private static String day(long at) {
