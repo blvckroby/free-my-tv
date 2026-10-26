@@ -73,6 +73,8 @@ final class Recs {
     private static final String COVERS = "https://image.tmdb.org/t/p/w1280";
     private static final String LOGOS = "https://image.tmdb.org/t/p/w500";
     private static final long LIST_EVERY = 6 * 3600_000L;
+    /** How many titles the home screen's "For You" row shows. */
+    static final int FOR_YOU = 10;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 7;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
@@ -195,6 +197,15 @@ final class Recs {
 
     /** This hour's 3, movies only ("movie") or shows only ("tv"); null = both (the home screen tabs). */
     List<Pick> now(String kind) {
+        return now(kind, 3);
+    }
+
+    /** "For You" row: up to `max` of the list for this hour (same rotation and franchise rule as the three). */
+    List<Pick> forYou(int max) {
+        return now(null, max);
+    }
+
+    private List<Pick> now(String kind, int max) {
         List<Pick> list = new ArrayList<>();
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
         Map<String, Boolean> have = new HashMap<>();   // one look per app, not per title (this runs every 15 s)
@@ -210,7 +221,7 @@ final class Recs {
         // Three per hour, never two from the same franchise ("Law & Order" and "Law & Order: Special…").
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (int i = 0; i < list.size() && out.size() < 3; i++) {
+        for (int i = 0; i < list.size() && out.size() < max; i++) {
             Pick p = list.get((int) ((hour * 3 + i) % list.size()));
             if (seen.add(franchise(p.title))) out.add(p);
         }
@@ -412,7 +423,7 @@ final class Recs {
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (String kind : new String[] {null, "movie", "tv"}) {
-            for (Pick p : now(kind)) if (seen.add(key(p))) out.add(p);
+            for (Pick p : kind == null ? forYou(FOR_YOU) : now(kind)) if (seen.add(key(p))) out.add(p);
         }
         return out;
     }

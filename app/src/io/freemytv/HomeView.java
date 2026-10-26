@@ -42,17 +42,18 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * The home screen, styled after the Apple TV app with the macOS 27 glass:
- *  - at the top left, the "For You" title and the tabs (Explore, Movies, Shows); at the top right, icon-only glass
- *    buttons (Live TV, HDMI Inputs, Settings), with the focused one's name below it, and the small crypto quotes
- *    (logo + price) at the right end of the tab row;
- *  - three cards with the titles recommended for right now in the selected tab (Recs, from TMDB); the background is
- *    the first card's photo, heavily blurred and almost white (Backdrop); without one, a light gradient;
+ * The home screen ("Matchday", the design of the HTML preview), with the macOS 27 glass:
+ *  - at the top, the time, date and weather; at the top right, icon-only glass buttons (Live TV, HDMI Inputs,
+ *    Settings, Sports, profile), with the focused one's name below it;
+ *  - sports first: the scoreboard (the match or race on now or next, with a countdown or the minute) and beside it
+ *    the "Next" list and the full schedule (Sports);
+ *  - the chips (For You, Movies, Shows) and their row of posters, the selected one opened up into its cover (Recs,
+ *    from TMDB); the background is the selected title's photo, heavily blurred (Backdrop);
  *  - at the bottom, the glass shelf with the apps (icons in each brand's color, like the tvOS Dock; the focused one
  *    grows);
  *  - ↓ on the shelf: everything moves up and the bottom drawer appears (inputs, shortcuts, weather for the next hours
  *    and quotes with the 24 h change); the background lightens (darkens at night). ↑ or Back closes it;
- *  - from sunset to sunrise, a night look: dark background, smoked glass and white text.
+ *  - always the dark look (ALWAYS_DARK): dark background, smoked glass and white text.
  * Measurements are in a 1920×1080 space (k = width / 1920). The screen is split into layers so the TV's weak GPU only
  * redraws what changed.
  */
@@ -89,8 +90,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
     // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
     private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
-    private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
-    private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
+    private static final float L_FEAT_W = 800, L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 84;
+    private static final float L_PLATTER_TOP = 878, L_TILE_H = 84, L_SHELF_PAD = 22;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
     private static final String[] TABS_EN = {"Explore", "Movies", "Shows"};
@@ -98,7 +99,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final String[] TABS_IT = {"Esplora", "Film", "Serie TV"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
-    private static final float RAIL_HEAD = 46, RAIL_ROW_H = 80, RAIL_MORE_H = 58, RAIL_GAP = 6;
+    private static final float RAIL_HEAD = 46, RAIL_ROW_H = 72, RAIL_MORE_H = 52, RAIL_GAP = 4;
+    // Matchday (the design of the HTML preview): the time, date and weather in one line at the top; the scoreboard and
+    // the "Next" list; the chips (For You, Movies, Shows) with the row of posters below, the selected one opened up into
+    // its cover; the shelf at the bottom. Always the dark look.
+    private static final float M_HEADER_BASE = 104, M_SPORT_TOP = 140, M_SPORT_H = 408, M_HERO_W = 1240, M_RAIL_X = 1356;
+    private static final float M_CHIPS_TOP = 568, M_CHIPS_H = 48, M_ROW_TOP = 636, M_ROW_H = 216;
+    private static final float M_POSTER_W = 144, M_COVER_W = 384, M_ROW_GAP = 20;
+    private static final int Z_SPORT = 6, Z_CHIPS = 7;
+    private static final boolean ALWAYS_DARK = true;
 
     private final Activity activity;
     private final Scene scene = new Scene();
@@ -145,6 +154,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final int CARDS = 10;
     private final Spring[] cardFocus = new Spring[CARDS];
     private final RectF[] cardRects = new RectF[CARDS];
+    /** The scoreboard (0) and the "Next" list beside it: up to 4 events and the full schedule. */
+    private static final int SPORT = 6;
+    private List<Recs.Pick> sportCards = new ArrayList<>();
+    private final Spring[] sportFocus = new Spring[SPORT];
+    private final RectF[] sportRects = new RectF[SPORT];
+    private int sportIndex;
+    private String dateText = "", weatherText = "", weatherSymbol = "";
     /** Carousel position (fractional index of the selected card, so the widths follow it) and its caption. */
     private final Spring carPos = new Spring(0.38f, 0.82f, 0);
     private boolean carDirty;
@@ -152,6 +168,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Rect fitSrc = new Rect();
     private static final String[] RANKS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
+    private Paint lDate, lWeather, lHeroTitle, lHeroSmall, lCapTitle, lCapMeta;
     private Paint lBoard, lBoardWord, lBoardLine, lBoardRight, lBoardLineRight, lLive, lSportDay, lSportTeam, lRailHead, lRailTime, lRailSmall, lRailText, lRailMore;
     private Paint lSportMgp, lSportF1, lSportName, lSportMono, lSportLabel, lSportTitle, lSportWhen, lRank, lCaption, lAvatar, lClock, lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip;
     private Shader lightGradient;
@@ -353,6 +370,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             cardFocus[i] = new Spring(0.32f, 0.78f, 0);
             cardRects[i] = new RectF();
         }
+        for (int i = 0; i < SPORT; i++) {
+            sportFocus[i] = new Spring(0.32f, 0.78f, 0);
+            sportRects[i] = new RectF();
+        }
         makeLightButtons();
         recs.setLight(true);
         checkNight(false);
@@ -455,6 +476,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     @Override public void onData() {
+        updateWeatherText();
         updatePalette();
         checkNight(true);
         layoutStatus();
@@ -476,12 +498,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int width = MeasureSpec.getSize(widthSpec), height = MeasureSpec.getSize(heightSpec);
         float kk = width / 1920f;
         measure(sky, width, height);
-        measure(heroLayer, width, Math.round(790 * kk));
+        measure(heroLayer, width, Math.round(900 * kk));
         measure(status, Math.round(1160 * kk), Math.round(240 * kk));
         // Sized to what they draw (the glass and its shadow; the grown tiles and their shadows): smaller layers are
         // cheaper for the GPU to composite on every frame of the drawer animation.
-        measure(platter, width, Math.round(320 * kk));
-        measure(tiles, width, Math.round(270 * kk));
+        measure(platter, width, Math.round(250 * kk));
+        measure(tiles, width, Math.round(210 * kk));
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
@@ -498,8 +520,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sky.layout(0, 0, width, height);
         place(heroLayer, 0, 0);
         place(status, width - status.getMeasuredWidth(), 0);
-        place(platter, 0, Math.round(750 * kk));
-        place(tiles, 0, Math.round(790 * kk));
+        place(platter, 0, Math.round(830 * kk));
+        place(tiles, 0, Math.round(850 * kk));
         place(drawerLayer, 0, Math.round(470 * kk));
         sheetLayer.layout(0, 0, width, height);
         sheetLayer.setPivotX(width / 2f);
@@ -523,6 +545,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         gridLabels = null;
         clockMinute = -1;
         updateClock();
+        updateWeatherText();
         layoutShelf();
         layoutStatus();
         layoutDrawer();
@@ -545,9 +568,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (Paint p : new Paint[] {labelPaint, titlePaint, metaPaint, clockPaint}) p.setShadowLayer(22 * k, 0, 2 * k, 0x59000000);
         lTitle = Ui.text(Ui.displaySemibold, 76 * k, L_INK);
         lTitle.setLetterSpacing(0.004f);
-        lTab = Ui.text(Ui.medium, 30 * k, L_DIM);
-        lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
-        lCardTitle = Ui.text(Ui.semibold, 31 * k, L_INK);
+        lTab = Ui.text(Ui.medium, 25 * k, L_DIM);
+        lTabOn = Ui.text(Ui.semibold, 25 * k, L_INK);
+        lCardTitle = Ui.text(Ui.semibold, 21 * k, L_INK);
         lCardTitle.setLetterSpacing(0.012f);
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
@@ -588,13 +611,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lSportMono.setTextAlign(Paint.Align.CENTER);
         lCaption = Ui.text(Ui.medium, 30 * k, L_DIM);
         lCaption.setTextAlign(Paint.Align.RIGHT);
-        lRank = Ui.text(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
+        lRank = Ui.text(Ui.displaySemibold, 54 * k, 0xFFFFFFFF);
         lRank.setShadowLayer(9 * k, 0, 3 * k, 0xCC000000);   // a light outer shadow: readable on white too
         lAvatar = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
         lAvatar.setTextAlign(Paint.Align.CENTER);
-        lClock = Ui.text(Ui.displaySemibold, 64 * k, L_INK);
-        lClock.setLetterSpacing(0.004f);
-        lClock.setTextAlign(Paint.Align.CENTER);
+        lClock = Ui.numbers(Ui.displaySemibold, 56 * k, L_INK);
+        lClock.setLetterSpacing(-0.02f);
+        lDate = Ui.text(Ui.medium, 24 * k, L_DIM);
+        lWeather = Ui.text(Ui.medium, 24 * k, L_DIM);
+        lWeather.setTextAlign(Paint.Align.RIGHT);
+        lHeroTitle = Ui.text(Ui.displaySemibold, 72 * k, 0xFFFFFFFF);
+        lHeroTitle.setLetterSpacing(-0.02f);
+        lHeroSmall = Ui.text(Ui.medium, 24 * k, 0xD9FFFFFF);
+        lCapTitle = Ui.text(Ui.semibold, 22 * k, L_INK);
+        lCapTitle.setTextAlign(Paint.Align.RIGHT);
+        lCapMeta = Ui.text(Ui.medium, 22 * k, L_DIM);
+        lCapMeta.setTextAlign(Paint.Align.RIGHT);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         lightGradient = null;
@@ -656,7 +688,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             carDirty = false;
             layoutCarousel();
         }
-        boolean topMoving = step(topFocus, dt), cardsMoving = step(cardFocus, dt) | carMoving;
+        boolean topMoving = step(topFocus, dt), cardsMoving = step(cardFocus, dt) | step(sportFocus, dt) | carMoving;
         if (topMoving) status.invalidate();
         heroMoving |= topMoving | cardsMoving;
         boolean drawerItemsMoving = step(drawerFocus, dt);
@@ -738,6 +770,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (minute == clockMinute || clockPaint == null) return false;
         clockMinute = minute;
         clockText = Ui.clock(now);
+        String d = Ui.date(now);
+        dateText = d.isEmpty() ? d : Character.toUpperCase(d.charAt(0)) + d.substring(1);
         return true;
     }
 
@@ -875,7 +909,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Day or night right now (from the sun at your location); `animate`: with the transition. */
     private void checkNight(boolean animate) {
-        boolean want = data.isNight(System.currentTimeMillis());
+        boolean want = ALWAYS_DARK || data.isNight(System.currentTimeMillis());
         if (want == nightTarget) return;
         nightTarget = want;
         if (animate && running) {
@@ -947,6 +981,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
         lTip.setColor(tone(L_INK, WHITE));
         lClock.setColor(tone(L_INK, WHITE));
+        lDate.setColor(tone(L_DIM, 0xA6FFFFFF));
+        lWeather.setColor(tone(L_DIM, 0xA6FFFFFF));
+        lCapTitle.setColor(tone(L_INK, WHITE));
+        lCapMeta.setColor(tone(L_DIM, 0xA6FFFFFF));
         lCaption.setColor(tone(L_DIM, 0xFF8E8E93));
         staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
     }
@@ -1115,7 +1153,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void layoutShelf() {
         int n = shelf.size();
-        float pad = SHELF_PAD * k, gap = TILE_GAP * k, th = L_TILE_H * k;
+        float pad = L_SHELF_PAD * k, gap = TILE_GAP * k, th = L_TILE_H * k;
         float full = (CONTENT_R - MARGIN) * k;
         float tw = Math.min(TILE_MAX_W * k, (full - Math.max(0, n - 1) * gap) / Math.max(1, n));
         float width = n * tw + Math.max(0, n - 1) * gap, left = (w - width) / 2f;
@@ -1132,7 +1170,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
     private void drawPlatter(Canvas c) {
         if (shelf.isEmpty()) return;
-        float radius = (TILE_RADIUS + SHELF_PAD) * k;
+        float radius = (TILE_RADIUS + L_SHELF_PAD) * k;
         tmp.set(platterRect);
         tmp.offset(0, 18 * k);
         shadow.setColor(tone(0x1F000000, 0x52000000));
@@ -1639,8 +1677,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             carPos.snap(cardIndex);
             carDirty = true;
         }
-        boolean topChanged = aim(topFocus, !sheetOpen && zone == Z_TOP ? topIndex : -1, snap);
+        boolean topChanged = aim(topFocus, sheetOpen ? -1 : zone == Z_TOP ? topIndex : zone == Z_CHIPS ? tab : -1, snap);
         heroChanged |= aim(cardFocus, !sheetOpen && zone == Z_CARDS ? cardIndex : -1, snap) | topChanged;
+        heroChanged |= aim(sportFocus, !sheetOpen && zone == Z_SPORT ? sportIndex : -1, snap);
         statusChanged |= topChanged;
         tilesDirty |= snap || tilesChanged;
         statusDirty |= snap || statusChanged;
@@ -2046,17 +2085,30 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
-        } else if (zone == Z_CARDS && cardIndex < cards.size() && "more".equals(cards.get(cardIndex).kind)) {
-            it = HomeApps.action(HomeApps.SPORTS, "sports", cards.get(cardIndex).title, "sports");
-            r = cardRects[cardIndex];
-        } else if (zone == Z_CARDS && cardIndex < cards.size() && "row".equals(cards.get(cardIndex).kind)) {
-            // A "Next" event takes the scoreboard (until it is over).
-            chosenSport = cards.get(cardIndex).event;
-            cardIndex = 0;
-            click.open();
-            updateCards();
+        } else if (zone == Z_CHIPS) {
+            if (cards.isEmpty()) return;
+            zone = Z_CARDS;      // OK on a chip: into its row
+            click.move();
             retarget(false);
             return;
+        } else if (zone == Z_SPORT) {
+            Recs.Pick p = sportIndex < sportCards.size() ? sportCards.get(sportIndex) : null;
+            if (p == null) return;
+            r = sportRects[sportIndex];
+            if ("more".equals(p.kind)) {
+                it = HomeApps.action(HomeApps.SPORTS, "sports", p.title, "sports");
+            } else if ("row".equals(p.kind)) {
+                // A "Next" event takes the scoreboard (until it is over).
+                chosenSport = p.event;
+                sportIndex = 0;
+                click.open();
+                updateCards();
+                retarget(false);
+                return;
+            } else {
+                if (p.pkg == null) return;
+                it = HomeApps.app(p.pkg, Recs.serviceName(p));
+            }
         } else if (zone == Z_CARDS) {
             Recs.Pick p = cardIndex < cards.size() ? cards.get(cardIndex) : null;
             if (p == null || p.pkg == null) return;
@@ -2105,7 +2157,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             for (int i = 0; i < others.size(); i++) out.add(a11yId(GRID, i));
             return;
         }
-        for (int i = 0; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
+        for (int i = 3; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
+        for (int i = 0; i < Math.min(sportCards.size(), SPORT); i++) out.add(a11yId(Z_SPORT, i));
+        for (int i = 0; i < 3; i++) out.add(a11yId(Z_CHIPS, i));
         for (int i = 0; i < cards.size(); i++) out.add(a11yId(Z_CARDS, i));
         for (int i = 0; i < shelf.size(); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
@@ -2118,8 +2172,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (i >= others.size()) return "";
                 return label(others, i) + ", " + (i + 1) + Ui.tr(" de ", " of ") + others.size();
             case Z_TOP:
-                if (i >= 3) return label(lightButtons, i - 3);
-                return tabs()[i] + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
+                return i >= 3 ? label(lightButtons, i - 3) : "";
+            case Z_CHIPS:
+                return i < 3 ? tabs()[i] + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3") : "";
+            case Z_SPORT: return i < sportCards.size() ? pickText(sportCards.get(i)) : "";
             case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
@@ -2145,9 +2201,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             }
             case Z_TOP:
-                if (i >= 3 + lightButtons.size()) return false;
+                if (i < 3 || i >= 3 + lightButtons.size()) return false;
                 a11yRect.set(topRects[i]);
-                dy = (i < 3 ? heroLayer : status).getTranslationY();
+                dy = status.getTranslationY();
+                break;
+            case Z_CHIPS:
+                if (i >= 3) return false;
+                a11yRect.set(topRects[i]);
+                dy = heroLayer.getTranslationY();
+                break;
+            case Z_SPORT:
+                if (i >= Math.min(sportCards.size(), SPORT)) return false;
+                a11yRect.set(sportRects[i]);
+                dy = heroLayer.getTranslationY();
                 break;
             case Z_CARDS:
                 if (i >= cards.size()) return false;
@@ -2179,6 +2245,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (sheetOpen) return others.isEmpty() ? -1 : a11yId(GRID, gridIndex);
         switch (zone) {
             case Z_TOP: return a11yId(Z_TOP, topIndex);
+            case Z_CHIPS: return a11yId(Z_CHIPS, tab);
+            case Z_SPORT: return sportIndex < sportCards.size() ? a11yId(Z_SPORT, sportIndex) : -1;
             case Z_CARDS: return cardIndex < cards.size() ? a11yId(Z_CARDS, cardIndex) : -1;
             case Z_SHELF: return shelf.isEmpty() ? -1 : a11yId(Z_SHELF, shelfIndex);
             case Z_DRAWER: return drawerItems.isEmpty() ? -1 : a11yId(Z_DRAWER, drawerIndex);
@@ -2205,10 +2273,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 drawerIndex = i;
                 break;
             case Z_TOP:
-                if (i >= 3 + lightButtons.size()) return;
+                if (i < 3 || i >= 3 + lightButtons.size()) return;
                 if (drawerOpen) closeDrawer();
                 topIndex = i;
-                if (i < 3) selectTab(i);
+                break;
+            case Z_CHIPS:
+                if (i >= 3) return;
+                if (drawerOpen) closeDrawer();
+                selectTab(i);
+                break;
+            case Z_SPORT:
+                if (i >= Math.min(sportCards.size(), SPORT)) return;
+                if (drawerOpen) closeDrawer();
+                sportIndex = i;
                 break;
             case Z_CARDS:
                 if (i >= cards.size()) return;
@@ -2246,58 +2323,54 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void layoutLight() {
         if (lTab == null) return;
-        // Text tabs; the focus pill extends 26 px past the text (the first tab's text starts at the margin).
-        float pad = 26 * k, tabTop = L_TABBAR_TOP * k, tabBottom = (L_TABBAR_TOP + L_TABBAR_H) * k;
-        float x = MARGIN * k - pad;
+        // The chips (For You, Movies, Shows) above the row of posters; the focus pill extends 26 px past the text.
+        float pad = 26 * k, top = M_CHIPS_TOP * k, bottom = (M_CHIPS_TOP + M_CHIPS_H) * k;
+        float x = MARGIN * k;
         for (int i = 0; i < 3; i++) {
             float tw = Math.max(lTabOn.measureText(tabs()[i]), lTab.measureText(tabs()[i]));
-            topRects[i].set(x, tabTop, x + tw + 2 * pad, tabBottom);
-            x = topRects[i].right + 4 * k;
+            topRects[i].set(x, top, x + tw + 2 * pad, bottom);
+            x = topRects[i].right + 6 * k;
         }
         float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
         for (int i = lightButtons.size() - 1; i >= 0; i--) {
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
-        layoutExploreCards();
+        layoutSport();
         layoutCarousel();
         heroDirty = statusDirty = true;
     }
 
-    private void layoutExploreCards() {
-        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, left = MARGIN * k, tall = L_TALL_W * k;
-        float wide = (CONTENT_R - MARGIN) * k - 2 * tall - 2 * g;
-        cardRects[0].set(left, top, left + wide, top + ch);
-        if (rail()) {
-            // "Next": a heading, then one row per event and the full schedule, in the space of the two tall cards.
-            float x0 = cardRects[0].right + g, x1 = CONTENT_R * k, y = top + RAIL_HEAD * k;
-            for (int i = 1; i < Math.min(cards.size(), CARDS); i++) {
-                boolean more = "more".equals(cards.get(i).kind);
-                float h = (more ? RAIL_MORE_H : RAIL_ROW_H) * k;
-                if (more) y += 8 * k;
-                cardRects[i].set(x0, y, x1, y + h);
-                y += h + RAIL_GAP * k;
-            }
-            return;
+    /** The scoreboard at the left; at its right the "Next" list: a heading, one row per event, the full schedule. */
+    private void layoutSport() {
+        float top = M_SPORT_TOP * k, left = MARGIN * k;
+        sportRects[0].set(left, top, left + M_HERO_W * k, top + M_SPORT_H * k);
+        float x0 = M_RAIL_X * k, x1 = CONTENT_R * k, y = top + RAIL_HEAD * k;
+        for (int i = 1; i < Math.min(sportCards.size(), SPORT); i++) {
+            boolean more = "more".equals(sportCards.get(i).kind);
+            float h = (more ? RAIL_MORE_H : RAIL_ROW_H) * k;
+            if (more) y += 6 * k;
+            sportRects[i].set(x0, y, x1, y + h);
+            y += h + RAIL_GAP * k;
         }
-        cardRects[1].set(cardRects[0].right + g, top, cardRects[0].right + g + tall, top + ch);
-        cardRects[2].set(cardRects[1].right + g, top, cardRects[1].right + g + tall, top + ch);
     }
 
     /**
-     * Top 10 carousel: the selected card is the wide one (L_FEAT_W), the others posters (L_TALL_W). Widths follow the
-     * fractional position, so moving left or right stretches one card while the other shrinks; everything before the
-     * selected card is off to the left.
+     * The row of posters (For You, or the country's Top 10): the selected one is opened up into its cover (M_COVER_W),
+     * the others are posters (M_POSTER_W). Widths follow the fractional position, so moving left or right stretches one
+     * card while the other shrinks; the cards before the selected one slide off to the left.
      */
     private void layoutCarousel() {
-        if (tab == 0) return;
         int n = Math.min(cards.size(), CARDS);
         if (n == 0) return;
-        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, pw = L_TALL_W * k, fw = L_FEAT_W * k;
+        float top = M_ROW_TOP * k, ch = M_ROW_H * k, g = M_ROW_GAP * k, pw = M_POSTER_W * k, fw = M_COVER_W * k;
         float pos = Math.max(0, Math.min(n - 1, carPos.value));
         int base = (int) Math.floor(pos);
         float frac = pos - base;
         float offset = base * (pw + g) + frac * (pw + (fw - pw) * (1 - frac) + g);
+        // Keep the row full at its end: no empty space after the last card.
+        float full = n * pw + (n - 1) * g + (fw - pw), room = (CONTENT_R - MARGIN) * k;
+        offset = Math.min(offset, Math.max(0, full - room));
         float x = MARGIN * k - offset;
         for (int j = 0; j < n; j++) {
             float wj = pw + (fw - pw) * Ui.clamp(1 - Math.abs(pos - j));
@@ -2306,31 +2379,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** The three cards of the current tab (Explore, Movies, Shows) and the background taken from the first one. */
+    /** The scoreboard and "Next" list, and the row of the selected chip; the background follows the selected title. */
     private void updateCards() {
-        // Movies and Shows: the country's Top 10 (a carousel); Explore: this hour's 3 picks.
-        List<Recs.Pick> list = tab == 0 ? explore() : recs.top(TAB_KIND[tab]);
-        if (tab == 0) layoutExploreCards();
+        List<Recs.Pick> sport = sportList();
+        if (!samePicks(sport, sportCards)) {
+            sportCards = sport;
+            sportIndex = Math.min(sportIndex, Math.max(0, sport.size() - 1));
+            layoutSport();
+        }
+        List<Recs.Pick> list = tab == 0 ? recs.forYou(Recs.FOR_YOU) : recs.top(TAB_KIND[tab]);
         if (!samePicks(list, cards)) {
             cards = list;
             cardIndex = Math.min(cardIndex, Math.max(0, list.size() - 1));
-            if (tab == 0) layoutExploreCards();
             carDirty = true;
             if (zone == Z_CARDS && list.isEmpty()) {
-                zone = Z_SHELF;
+                zone = Z_CHIPS;
                 retarget(false);
             }
         }
-        for (Recs.Pick p : recs.wantedAll()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
-        topCaption = tab == 0 ? "" : Ui.tr("Top 10 em ", "Top 10 in ")
+        for (Recs.Pick p : recs.wantedAll()) recs.backdrop(p);   // all three chips preloaded: switching is instant
+        topCaption = tab == 0 ? Ui.tr("Escolhidos para agora", "Picked for now", "Elegidos para ahora", "Scelti per te")
+                : Ui.tr("Top 10 em ", "Top 10 in ")
                 + new java.util.Locale("", Config.TMDB_REGION.trim().toUpperCase(java.util.Locale.ROOT)).getDisplayCountry(Ui.locale());
-        Recs.Pick backgroundPick = null;     // the sports card has no photo: the background comes from the next card
-        for (int i = tab == 0 ? 0 : Math.min(cardIndex, cards.size() - 1); i < cards.size() && backgroundPick == null; i++) {
+        Recs.Pick backgroundPick = null;
+        for (int i = Math.max(0, Math.min(cardIndex, cards.size() - 1)); i < cards.size() && backgroundPick == null; i++) {
             if (isFilm(cards.get(i))) backgroundPick = cards.get(i);
-        }
-        if (backgroundPick == null && rail()) {      // matchday: the background still comes from this hour's first title
-            List<Recs.Pick> films = recs.now(null);
-            if (!films.isEmpty()) backgroundPick = films.get(0);
         }
         Backdrop b = backgroundPick == null ? null : recs.backdrop(backgroundPick);
         if (cards.isEmpty() || backgroundPick == null || b != null) showBackdrop(b);
@@ -2339,22 +2412,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * Explore: this hour's films and shows; when a match or race is on or about to start, it takes the large card and
-     * the other two cards keep the first two titles.
+     * The scoreboard's list: the match or race on now or next (or the one picked from "Next"), the coming events and the
+     * full schedule. Without any event, this hour's first title takes the scoreboard's place.
      */
-    private List<Recs.Pick> explore() {
-        List<Recs.Pick> films = recs.now(null);
+    private List<Recs.Pick> sportList() {
         Sports sports = Sports.get(getContext());
-        Recs.Pick sport = sports.pick(chosenSport);
-        if (sport == null) {
-            chosenSport = null;
-            return films;
-        }
-        if (chosenSport != null && sport.event != chosenSport) chosenSport = null;
-        // Matchday: the scoreboard, then the "Next" list (up to 4 events) and the full schedule.
+        Recs.Pick first = sports.pick(chosenSport);
+        if (first == null) chosenSport = null;
+        else if (chosenSport != null && first.event != chosenSport) chosenSport = null;
         List<Recs.Pick> out = new ArrayList<>();
-        out.add(sport);
-        out.addAll(sports.next(sport.event, 4));
+        if (first != null) {
+            out.add(first);
+            out.addAll(sports.next(first.event, 4));
+        } else {
+            List<Recs.Pick> films = recs.now(null);
+            if (!films.isEmpty()) {
+                out.add(films.get(0));
+            } else {
+                Recs.Pick empty = new Recs.Pick();
+                empty.kind = "empty";
+                empty.id = 2;
+                empty.title = Ui.tr("Nenhum jogo nos próximos dias", "No games in the coming days",
+                        "Ningún partido en los próximos días", "Nessun evento nei prossimi giorni");
+                out.add(empty);
+            }
+        }
         Recs.Pick more = new Recs.Pick();
         more.kind = "more";
         more.id = 1;
@@ -2363,13 +2445,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return out;
     }
 
-    /** Explore shows the scoreboard and the "Next" list (rather than three picks). */
-    private boolean rail() {
-        return tab == 0 && cards.size() > 1 && "more".equals(cards.get(cards.size() - 1).kind);
-    }
-
     private static boolean isFilm(Recs.Pick p) {
-        return !p.kind.equals("sport") && !p.kind.equals("row") && !p.kind.equals("more");
+        return "movie".equals(p.kind) || "tv".equals(p.kind);
     }
 
     private void selectTab(int index) {
@@ -2420,100 +2497,134 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (night > 0.001f) drawImage(c, b.nightImage, alpha * night);
     }
 
+    /** Hero layer: the header, the scoreboard and "Next", the chips and the row of posters. */
     private void drawLightTop(Canvas c) {
         applyTone();
-        String hello = Ui.tr("Para você", "For You");
-        c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
-        // The time, centered at the top, in the same font as the rest.
-        c.drawText(clockText, w / 2f, L_TITLE_BASE * k, lClock);
-        // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
-        // the white pill with a shadow and grows a little (the tvOS focus).
+        drawHeader(c);
+        drawRail(c);
+        drawHeroCard(c);
+        drawChips(c);
+        drawCarousel(c);
+    }
+
+    /** The time and date at the left; the weather (symbol, temperature, city) at the right, before the buttons. */
+    private void drawHeader(Canvas c) {
+        float base = M_HEADER_BASE * k, x = MARGIN * k;
+        c.drawText(clockText, x - Ui.leftBearing(lClock, clockText), base, lClock);
+        c.drawText(dateText, x + lClock.measureText(clockText) + 22 * k, base, lDate);
+        if (weatherText.isEmpty()) return;
+        float right = (lightButtons.isEmpty() ? CONTENT_R * k : topRects[3].left) - 40 * k;
+        c.drawText(weatherText, right, base - 6 * k, lWeather);
+        float sw = Symbols.width(getContext(), weatherSymbol, 34 * k);
+        Symbols.draw(getContext(), c, weatherSymbol, right - lWeather.measureText(weatherText) - 14 * k - sw / 2,
+                base - 6 * k - Ui.halfCap(lWeather), 34 * k, tone(L_INK, 0xEBFFFFFF));
+    }
+
+    /** "18° Caleppio di Settala": worked out when the weather changes, not on every frame. */
+    private void updateWeatherText() {
+        HomeData.Weather wx = data.weather;
+        if (Double.isNaN(wx.temp)) {
+            weatherText = "";
+            return;
+        }
+        String city = Prefs.city();
+        weatherText = HomeData.degrees(wx.temp) + (city.isEmpty() ? "" : "  " + city);
+        weatherSymbol = Symbols.weather(wx.code, wx.isDay);
+    }
+
+    /**
+     * For You, Movies, Shows: the selected one in bold on a faint pill; with focus on them, the selected one gets the
+     * white pill (the tvOS focus). At the right of the row, the focused title and its details (or the row's caption).
+     */
+    private void drawChips(Canvas c) {
         float focus = Ui.clamp(topFocus[tab].value);
         for (int i = 0; i < 3; i++) {
             RectF r = topRects[i];
-            if (i == tab && focus > 0.01f) {
+            if (i == tab) {
                 float s = 1 + 0.05f * focus;
                 cell.set(r.centerX() - r.width() * s / 2, r.centerY() - r.height() * s / 2,
                         r.centerX() + r.width() * s / 2, r.centerY() + r.height() * s / 2);
                 float rr = cell.height() / 2;
-                if (focus > 0.01f) {
-                    tmp.set(cell);
-                    tmp.offset(0, 8 * k * focus);
-                    shadow.setColor(Ui.alpha(0xFF000000, tone(0.22f, 0.4f) * focus));
-                    shadows.draw(c, tmp, rr, SHADOW_BLUR * k, shadow);
-                }
                 fill.setShader(null);
-                fill.setColor(Ui.alpha(0xFFFFFFFF, focus));
+                fill.setColor(blend(tone(0x14000000, 0x1AFFFFFF), 0xFFFFFFFF, focus));
                 c.drawRoundRect(cell, rr, rr, fill);
             }
             Paint p = i == tab ? lTabOn : lTab;
-            if (i == tab) lTabOn.setColor(blend(tone(L_INK, WHITE), L_INK, focus));   // always dark on the white pill
+            if (i == tab) lTabOn.setColor(blend(tone(L_INK, WHITE), L_INK, focus));   // dark on the white pill
             c.drawText(tabs()[i], r.centerX() - p.measureText(tabs()[i]) / 2, r.centerY() + Ui.halfCap(p), p);
         }
-        if (tab != 0) {
-            drawCarousel(c);
-        } else if (rail()) {
-            drawRail(c);
-            drawLightCard(c, 0);
-        } else {
-            int top = -1;
-            for (int i = 0; i < 3; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
-            for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
-            if (top >= 0) drawLightCard(c, top);
+        float base = (M_CHIPS_TOP + M_CHIPS_H / 2) * k + Ui.halfCap(lCapMeta), right = CONTENT_R * k;
+        Recs.Pick p = zone == Z_CARDS && cardIndex < cards.size() ? cards.get(cardIndex) : null;
+        if (p == null) {
+            c.drawText(topCaption, right, base, lCapMeta);
+            return;
         }
-        if (HomeData.coinCount() > 0) drawQuotes(c);
+        String meta = p.meta == null ? "" : p.meta;
+        c.drawText(meta, right, base, lCapMeta);
+        float x = right - (meta.isEmpty() ? 0 : lCapMeta.measureText(meta) + 16 * k);
+        String rank = tab > 0 && cardIndex < RANKS.length ? RANKS[cardIndex] : null;
+        c.drawText(p.title == null ? "" : p.title, x, base, lCapTitle);
+        if (rank != null) {
+            x -= lCapTitle.measureText(p.title == null ? "" : p.title) + 8 * k;
+            c.drawText(rank + ".", x, base, lCapTitle);
+        }
     }
 
     /**
-     * Recommendation card: the title's photo (already at the focused card size, so it stays sharp), rounded corners and
-     * a soft shadow; when focused, it grows 5%, rises and lights up its border. Below it, the title (and on the large
-     * card, genre · runtime · service).
+     * The scoreboard: a match or race (drawSportCard), or this hour's first title when there is none. Shadow, focus lift
+     * and lit border as the other cards.
      */
-    private void drawLightCard(Canvas c, int i) {
-        RectF base = cardRects[i];
-        Recs.Pick p = i < cards.size() ? cards.get(i) : null;
-        float v = cardFocus[i].value, f = Ui.clamp(v), s = 1 + 0.05f * v;
-        float bw = base.width(), bh = base.height(), r0 = 18 * k;
-        float cx = base.centerX(), cy = base.centerY() - 6 * k * v;
+    private void drawHeroCard(Canvas c) {
+        if (sportCards.isEmpty()) return;
+        RectF base = sportRects[0];
+        Recs.Pick p = sportCards.get(0);
+        float v = sportFocus[0].value, f = Ui.clamp(v), s = 1 + 0.02f * v;
+        float bw = base.width(), bh = base.height(), r0 = 26 * k;
+        float cx = base.centerX(), cy = base.centerY() - 4 * k * v;
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s;
         c.save();
         c.translate(cx, cy);
         c.scale(s, s);
         tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-        tmp.offset(0, (10 + 14 * f) * k);
-        shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.32f) + tone(0.2f, 0.28f) * f));
+        tmp.offset(0, (12 + 14 * f) * k);
+        shadowDeep.setColor(Ui.alpha(0xFF000000, 0.36f + 0.24f * f));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
-        Backdrop b = p == null ? null : recs.backdrop(p);
-        Bitmap img = b == null ? null : (i == 0 ? b.wide : b.tall);
-        if (p != null && p.kind.equals("sport")) {
+        if ("sport".equals(p.kind)) {
             drawSportCard(c, p, cell, r);
-        } else if (img != null) {
-            roundImage(c, img, cell, r);
         } else {
-            fill.setShader(null);
-            fill.setColor(tone(0xFFDADADF, 0xFF2C2C2E));
+            Backdrop b = isFilm(p) ? recs.backdrop(p) : null;
+            Bitmap img = b == null ? null : b.wide;
+            if (img != null) {
+                roundImageFit(c, img, cell, r, 1);
+            } else {
+                fill.setShader(null);
+                fill.setColor(0xFF1E2638);
+                c.drawRoundRect(cell, r, r, fill);
+            }
+            // Darker at the bottom, where the title goes.
+            fill.setShader(new LinearGradient(0, cell.top + cell.height() * 0.45f, 0, cell.bottom, 0x00000000, 0x99000000, Shader.TileMode.CLAMP));
             c.drawRoundRect(cell, r, r, fill);
-        }
-        if (f > 0.01f) {
-            sheen.setShader(new LinearGradient(cell.left, cell.top, cell.left + cell.width() * 0.5f, cell.bottom,
-                    Ui.alpha(0xFFFFFFFF, 0.22f * f), 0x00FFFFFF, Shader.TileMode.CLAMP));
-            c.drawRoundRect(cell, r, r, sheen);
+            fill.setShader(null);
+            float pad = 52 * k;
+            if (isFilm(p)) {
+                c.drawText(Ui.tr("Nenhum jogo nas próximas horas", "No games in the next hours",
+                        "Ningún partido en las próximas horas", "Nessun evento sportivo nelle prossime ore"),
+                        cell.left + pad, cell.top + 60 * k, lHeroSmall);
+            }
+            TextPaint tp = new TextPaint(lHeroTitle);
+            c.drawText(TextUtils.ellipsize(p.title == null ? "" : p.title, tp, cell.width() - 2 * pad, TextUtils.TruncateAt.END).toString(),
+                    cell.left + pad, cell.bottom - 96 * k, lHeroTitle);
+            if (p.meta != null && !p.meta.isEmpty()) c.drawText(p.meta, cell.left + pad, cell.bottom - 50 * k, lHeroSmall);
         }
         if (f > 0.01f) {
             rim.setShader(new LinearGradient(0, cell.top, 0, cell.bottom,
-                    Ui.alpha(0xFFFFFFFF, 0.9f * f), Ui.alpha(0xFFFFFFFF, 0.35f * f), Shader.TileMode.CLAMP));
+                    Ui.alpha(0xFFFFFFFF, 0.95f * f), Ui.alpha(0xFFFFFFFF, 0.5f * f), Shader.TileMode.CLAMP));
             c.drawRoundRect(cell, r, r, rim);
         }
-        if (p == null) return;
-        TextPaint tp = new TextPaint(lCardTitle);
-        c.drawText(TextUtils.ellipsize(p.title, tp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
-        if (i == 0 && p.meta != null && !p.meta.isEmpty()) {
-            TextPaint mp = new TextPaint(lCardMeta);
-            c.drawText(TextUtils.ellipsize(p.meta, mp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
-        }
     }
+
 
     /**
      * The scoreboard (matchday): the competition's artwork and color, its logo at the top left (the person's own in its
@@ -2629,20 +2740,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawRail(Canvas c) {
         Sports sports = Sports.get(getContext());
-        int n = Math.min(cards.size(), CARDS);
+        int n = Math.min(sportCards.size(), SPORT);
         if (n < 2) return;
         lRailHead.setColor(tone(L_DIM, 0xA6FFFFFF));
-        c.drawText(Ui.tr("Depois", "Next", "Después", "Dopo"), cardRects[1].left + 20 * k, cardRects[0].top + 28 * k, lRailHead);
+        // Hidden while a corner button has focus: its name appears right there.
+        if (zone != Z_TOP) c.drawText(Ui.tr("Depois", "Next", "Después", "Dopo"), M_RAIL_X * k + 20 * k, sportRects[0].top + 28 * k, lRailHead);
         for (int i = 1; i < n; i++) {
-            RectF row = cardRects[i];
-            Recs.Pick p = cards.get(i);
-            float f = Ui.clamp(cardFocus[i].value), s = 1 + 0.03f * f, cx = row.centerX(), cy = row.centerY();
+            RectF row = sportRects[i];
+            Recs.Pick p = sportCards.get(i);
+            float f = Ui.clamp(sportFocus[i].value), s = 1 + 0.03f * f, cx = row.centerX(), cy = row.centerY();
             cell.set(cx - row.width() * s / 2, cy - row.height() * s / 2, cx + row.width() * s / 2, cy + row.height() * s / 2);
             fill.setShader(null);
             if (f > 0.01f) {
                 fill.setColor(Ui.alpha(0xFFFFFFFF, f));
                 c.drawRoundRect(cell, 18 * k * s, 18 * k * s, fill);
-            } else if (i > 1 && !"more".equals(p.kind) && Ui.clamp(cardFocus[i - 1].value) < 0.01f) {
+            } else if (i > 1 && !"more".equals(p.kind) && Ui.clamp(sportFocus[i - 1].value) < 0.01f) {
                 fill.setColor(tone(0x1A000000, 0x1FFFFFFF));
                 float ly = row.top - RAIL_GAP * k / 2;
                 c.drawRect(row.left + 20 * k, ly - 0.75f * k, row.right - 18 * k, ly + 0.75f * k, fill);
@@ -2739,10 +2851,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         bitmapPaint.setColorFilter(null);
     }
 
-    /** The Top 10: posters, with the selected title opened up into its horizontal cover. */
+    /** The row of posters, with the selected title opened up into its horizontal cover. */
     private void drawCarousel(Canvas c) {
-        String caption = topCaption;
-        c.drawText(caption, CONTENT_R * k, (L_TABBAR_TOP + L_TABBAR_H / 2f) * k + Ui.halfCap(lCaption), lCaption);
         int n = Math.min(cards.size(), CARDS);
         if (n == 0) return;
         c.save();
@@ -2773,7 +2883,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
         Backdrop b = recs.backdrop(p);
-        Bitmap poster = b == null ? null : b.tall, feature = b == null ? null : b.feature;
+        Bitmap poster = b == null ? null : b.tall, feature = b == null ? null : b.feature != null ? b.feature : b.wide;
         if (poster == null && feature == null) {
             fill.setShader(null);
             fill.setColor(tone(0xFFDADADF, 0xFF2C2C2E));
@@ -2790,20 +2900,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     Ui.alpha(0xFFFFFFFF, 0.9f * f), Ui.alpha(0xFFFFFFFF, 0.35f * f), Shader.TileMode.CLAMP));
             c.drawRoundRect(cell, r, r, rim);
         }
-        c.drawText(RANKS[i], cell.left + 20 * k * s, cell.top + 20 * k * s + Ui.cap(lRank), lRank);
-        if (e > 0.05f) {
-            int a = Math.round(255 * e);
-            lCardTitle.setAlpha(a);
-            lCardMeta.setAlpha(a);
-            TextPaint tp = new TextPaint(lCardTitle);
-            c.drawText(TextUtils.ellipsize(p.title, tp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
-            if (p.meta != null && !p.meta.isEmpty()) {
-                TextPaint mp = new TextPaint(lCardMeta);
-                c.drawText(TextUtils.ellipsize(p.meta, mp, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 80 * k, lCardMeta);
-            }
-            lCardTitle.setAlpha(255);
-            lCardMeta.setAlpha(255);
+        if (poster == null && feature == null && p.title != null) {      // no picture yet: the title on the card
+            c.save();
+            c.clipRect(cell);
+            lCardTitle.setColor(0xFFFFFFFF);
+            c.drawText(p.title, cell.left + 14 * k, cell.bottom - 18 * k, lCardTitle);
+            c.restore();
+            applyTone();
         }
+        if (tab > 0) c.drawText(RANKS[i], cell.left + 14 * k * s, cell.top + 12 * k * s + Ui.cap(lRank), lRank);
     }
 
     /** The picture filling the rounded cell (center-cropped to its shape), at `alpha`. */
@@ -2934,76 +3039,74 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (b != null) showBackdrop(b);
     }
 
+    /**
+     * Matchday focus, top to bottom: the corner buttons; the scoreboard and its "Next" list (← → between them, ↑ ↓ along
+     * the list); the chips; the row of posters; the shelf (and ↓ there opens the drawer, handled by move()).
+     */
     private boolean moveLight(int dx, int dy) {
+        int buttons = lightButtons.size();
+        int sportLast = Math.min(sportCards.size(), SPORT) - 1;
         switch (zone) {
             case Z_SHELF:
                 if (dy >= 0 || shelf.isEmpty()) return false;
-                if (cards.isEmpty()) {
-                    zone = Z_TOP;
-                    topIndex = tab;
-                } else {
-                    zone = Z_CARDS;
-                    if (tab == 0) cardIndex = nearest(cardRects, cards.size(), tileRects[shelfIndex].centerX());
-                    if (rail() && cardIndex > 0) cardIndex = Math.min(cards.size(), CARDS) - 1;   // up from the shelf: the list's last row
-                }
+                zone = cards.isEmpty() ? Z_CHIPS : Z_CARDS;
                 break;
             case Z_CARDS:
-                if (rail()) {
-                    // Matchday: ← → between the scoreboard and the "Next" list, ↑ ↓ along the list.
-                    int last = Math.min(cards.size(), CARDS) - 1;
-                    if (cardIndex == 0) {
-                        if (dx > 0) cardIndex = 1;
-                        else if (dx < 0) return true;
-                        else if (dy < 0) {
-                            zone = Z_TOP;
-                            topIndex = tab;
-                        } else {
-                            zone = Z_SHELF;
-                            if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[0].centerX());
-                        }
-                    } else if (dx < 0) {
-                        cardIndex = 0;
-                    } else if (dx > 0) {
-                        return true;
-                    } else if (dy < 0) {
-                        if (cardIndex > 1) cardIndex--;
-                        else {
-                            zone = Z_TOP;
-                            topIndex = nearest(topRects, TOP, cardRects[1].centerX());
-                        }
-                    } else if (cardIndex < last) {
-                        cardIndex++;
-                    } else {
-                        zone = Z_SHELF;
-                        if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[cardIndex].centerX());
-                    }
-                    break;
-                }
                 if (dx != 0) {
                     int next = Math.max(0, Math.min(cards.size() - 1, cardIndex + dx));
                     if (next == cardIndex) return true;
                     cardIndex = next;
-                    if (tab != 0) selectedBackdrop();
+                    selectedBackdrop();
                 } else if (dy < 0) {
-                    zone = Z_TOP;
-                    topIndex = tab;     // as on Apple TV: moving up to the tabs focuses the selected tab
+                    zone = Z_CHIPS;
                 } else {
                     zone = Z_SHELF;
                     if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[cardIndex].centerX());
                 }
                 break;
+            case Z_CHIPS:
+                if (dx != 0) {
+                    int next = Math.max(0, Math.min(2, tab + dx));
+                    if (next == tab) return true;
+                    selectTab(next);
+                } else if (dy < 0) {
+                    if (sportCards.isEmpty()) return true;
+                    zone = Z_SPORT;
+                    sportIndex = 0;
+                } else {
+                    zone = cards.isEmpty() ? Z_SHELF : Z_CARDS;
+                }
+                break;
+            case Z_SPORT:
+                if (sportIndex == 0) {
+                    if (dx > 0 && sportLast >= 1) sportIndex = 1;
+                    else if (dx != 0) return true;
+                    else if (dy < 0) toButtons(sportRects[0].centerX(), buttons);
+                    else zone = Z_CHIPS;
+                } else if (dx < 0) {
+                    sportIndex = 0;
+                } else if (dx > 0) {
+                    return true;
+                } else if (dy < 0) {
+                    if (sportIndex > 1) sportIndex--;
+                    else toButtons(sportRects[sportIndex].centerX(), buttons);
+                } else if (sportIndex < sportLast) {
+                    sportIndex++;
+                } else {
+                    zone = Z_CHIPS;
+                }
+                break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(TOP - 1, topIndex + dx));
+                    int next = Math.max(3, Math.min(3 + buttons - 1, topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
-                    if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
                 } else if (dy > 0) {
-                    if (cards.isEmpty()) {
-                        zone = Z_SHELF;
+                    if (sportCards.isEmpty()) {
+                        zone = Z_CHIPS;
                     } else {
-                        zone = Z_CARDS;
-                        if (tab == 0) cardIndex = nearest(cardRects, cards.size(), topRects[topIndex].centerX());
+                        zone = Z_SPORT;
+                        sportIndex = sportLast >= 1 && topRects[topIndex].centerX() > M_RAIL_X * k ? 1 : 0;
                     }
                 } else {
                     return true;
@@ -3015,6 +3118,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         retarget(false);
         click.move();
         return true;
+    }
+
+    /** Up from the scoreboard: the corner button nearest to `x`. */
+    private void toButtons(float x, int buttons) {
+        if (buttons == 0) return;
+        zone = Z_TOP;
+        int best = 3;
+        float bestDistance = Float.MAX_VALUE;
+        for (int i = 3; i < 3 + buttons; i++) {
+            float d = Math.abs(topRects[i].centerX() - x);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = i;
+            }
+        }
+        topIndex = best;
     }
 
     private static int nearest(RectF[] rects, int count, float x) {
