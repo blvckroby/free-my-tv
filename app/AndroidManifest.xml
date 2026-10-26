@@ -27,6 +27,7 @@
         <package android:name="com.globo.globotv" />
         <package android:name="com.spotify.tv.android" />
         <package android:name="com.nuvio.tv" />
+        <package android:name="com.dazn" />
         <package android:name="com.monoplayer.app" />
         <package android:name="com.tcl.tv" />
         <package android:name="com.google.android.tv" />
@@ -71,6 +72,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The Sport button: every event of the day. -->
+        <activity
+            android:name=".SportsActivity"
+            android:process=":home"
+            android:exported="false"
+            android:label="Free My TV"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Home" />
 
         <!-- The home screen. Its own process (:home): if it ever crashes, the safety net in the main process still
              works. It only becomes the TV's home screen in Free My TV mode (cmd package set-home-activity). -->

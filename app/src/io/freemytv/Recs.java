@@ -43,8 +43,24 @@ final class Recs {
     static final class Pick {
         int id;
         String kind;            // "movie" or "tv"
-        String title, backdrop, cover = "", poster = "", meta = "", app, pkg;   // backdrop: wide card; poster: tall cards (TMDB)
+        String title, backdrop, cover = "", poster = "", logo = "", meta = "", app, pkg;   // backdrop: wide card; poster: tall cards (TMDB)
         boolean detailed;
+        int face;               // sport cards: title font (0 normal, 1 Formula 1, 2 MotoGP)
+        String flag = "", place = "";   // sport cards (F1, MotoGP): the circuit's country flag (URL) and place
+        int gradTop, gradBottom;   // sport cards: a vertical gradient (0 = the usual diagonal one)
+        boolean flat;           // sport cards: one flat color instead of a gradient
+        int accent;             // sport cards: the competition's color
+        String label = "";      // sport cards: the competition's name
+        String home = "", away = "", logoHome = "", logoAway = "", logoComp = "", art = "";   // sport cards: teams or athletes, logos (URLs)
+        // Sport cards, the scoreboard: the big line (kick-off time or the minute), the lines above and below it, the day
+        // ("Today"), the start as HH:mm, the race's name and session, and for the "Next" list the competition's dot color.
+        boolean live;
+        long start;
+        String board = "", boardTop = "", boardSub = "", day = "", clock = "", raceName = "", session = "";
+        String homeShort = "", awayShort = "", raceLine = "";   // the "Next" list: surnames for tennis; races: session, place
+        int dot;
+        Sports.Event event;
+        boolean posterClean, coverClean;   // textless images (BetterPoster style): the title's logo goes on top
         boolean top;            // in the country's Top 10 (Movies and Shows tabs): cover and poster, whatever app plays it
         boolean taste;          // picked from the TMDB profile (Explore)
     }
@@ -55,9 +71,10 @@ final class Recs {
     private static final String IMAGES = "https://image.tmdb.org/t/p/original";
     private static final String POSTERS = "https://image.tmdb.org/t/p/w780";
     private static final String COVERS = "https://image.tmdb.org/t/p/w1280";
+    private static final String LOGOS = "https://image.tmdb.org/t/p/w500";
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 6;
+    private static final int CACHE_VERSION = 7;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
@@ -246,6 +263,10 @@ final class Recs {
         return p.poster.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "poster" + p.poster.replace("/", ""));
     }
 
+    private File logoFile(Pick p) {
+        return p.logo.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "logo" + p.logo.replace("/", ""));
+    }
+
     private File coverFile(Pick p) {
         return p.cover.isEmpty() ? null : new File(new File(context.getCacheDir(), "recs"), "cover" + p.cover.replace("/", ""));
     }
@@ -401,6 +422,11 @@ final class Recs {
         return p.kind + ":" + p.id;
     }
 
+    /** Something outside Recs (the sports card) changed what Explore shows. */
+    void changed() {
+        notifyListeners();
+    }
+
     private void notifyListeners() {
         main.post(() -> { for (Listener l : new ArrayList<>(listeners)) l.onRecs(); });
     }
@@ -490,13 +516,13 @@ final class Recs {
         //    ones don't come back (what people already watch a lot is in the trending list above).
         int page = 1 + (int) ((System.currentTimeMillis() / 86_400_000L) % 3);
         String best = "&sort_by=vote_average.desc&page=" + page + common.replaceAll("&sort_by=[a-z._]+", "");
-        JSONArray topMovies = get("/discover/movie?vote_count.gte=1500&primary_release_date.gte=" + day(-365 * 8)
+        JSONArray bestMovies = get("/discover/movie?vote_count.gte=1500&primary_release_date.gte=" + day(-365 * 8)
                 + best).getJSONArray("results");
-        JSONArray topShows = get("/discover/tv?vote_count.gte=500&first_air_date.gte=" + day(-365 * 8)
+        JSONArray bestShows = get("/discover/tv?vote_count.gte=500&first_air_date.gte=" + day(-365 * 8)
                 + best).getJSONArray("results");
         List<Pick> gemMovies = new ArrayList<>(), gemShows = new ArrayList<>();
-        for (int i = 0; i < topMovies.length(); i++) add(gemMovies, topMovies.getJSONObject(i), "movie");
-        for (int i = 0; i < topShows.length(); i++) add(gemShows, topShows.getJSONObject(i), "tv");
+        for (int i = 0; i < bestMovies.length(); i++) add(gemMovies, bestMovies.getJSONObject(i), "movie");
+        for (int i = 0; i < bestShows.length(); i++) add(gemShows, bestShows.getJSONObject(i), "tv");
         // Each source gets its share (up to 10 trending, 10 new, 10 to discover); movies and shows alternating, no repeats.
         List<Pick> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
@@ -511,16 +537,16 @@ final class Recs {
         alternate(candidates, new java.util.HashSet<>(), tasteMovies, tasteShows, 24);
         // Only what plays on an app the TV has (the details say where), up to 12.
         List<Pick> mine = new ArrayList<>();
-        for (Pick p : candidates) {
+        for (Pick t : candidates) {
             if (mine.size() >= 12) break;
             try {
-                fetchDetails(p);
+                fetchDetails(t);
             } catch (Exception e) {
                 continue;
             }
-            if (p.pkg != null && seen.add(key(p))) {
-                p.taste = true;
-                mine.add(p);
+            if (t.pkg != null && seen.add(key(t))) {
+                t.taste = true;
+                mine.add(t);
             }
         }
         list.addAll(mine);
@@ -645,8 +671,18 @@ final class Recs {
     private void fetchDetails(Pick p) throws Exception {
         JSONObject o = get("/" + p.kind + "/" + p.id
                 + "?language=" + lang() + "&append_to_response=watch/providers,images&include_image_language=null," + Ui.language + ",en");
-        String best = bestBackdrop(o.optJSONObject("images"));
-        if (best != null && !p.top) p.backdrop = best;   // the Top 10 keeps TMDB's own cover
+        JSONObject images = o.optJSONObject("images");
+        // BetterPoster style: the title's textless background and poster, with its logo (in the chosen language) on top.
+        String logo = bestLogo(images), clean = bestImage(images, "backdrops"), cleanPoster = bestImage(images, "posters");
+        String best = clean != null ? clean : bestBackdrop(images);
+        if (best != null) {
+            p.backdrop = best;
+            p.cover = best;
+            p.coverClean = clean != null && logo != null;
+        }
+        p.posterClean = cleanPoster != null && logo != null;
+        if (p.posterClean) p.poster = cleanPoster;      // without a logo to put on it, the poster keeps its own title
+        p.logo = logo == null ? "" : logo;
         List<String> parts = new ArrayList<>();
         JSONArray genres = o.optJSONArray("genres");
         if (p.kind.equals("tv")) parts.add(Ui.tr("Série", "Series"));
@@ -705,6 +741,44 @@ final class Recs {
      * The title's best backdrop: no text written over it (our own text goes on top of it), at the highest resolution
      * (up to 3840, TMDB's 4K) and, on a tie, the highest rated.
      */
+    /** The textless image of a kind ("backdrops" or "posters") with the highest resolution and rating, or null. */
+    private static String bestImage(JSONObject images, String kind) {
+        JSONArray list = images == null ? null : images.optJSONArray(kind);
+        String best = null;
+        double bestScore = -1;
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject b = list.optJSONObject(i);
+            if (b == null || b.optString("file_path", "").isEmpty() || !b.isNull("iso_639_1")) continue;
+            double score = Math.min(b.optInt("width"), 3840) * 100 + b.optDouble("vote_average", 0);
+            if (score > bestScore) {
+                bestScore = score;
+                best = b.optString("file_path");
+            }
+        }
+        return best;
+    }
+
+    /** The title's logo in the language of the screen (then English, then one with no language); PNG only. */
+    private static String bestLogo(JSONObject images) {
+        JSONArray list = images == null ? null : images.optJSONArray("logos");
+        String best = null;
+        double bestScore = -1;
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject b = list.optJSONObject(i);
+            String path = b == null ? "" : b.optString("file_path", "");
+            if (path.isEmpty() || !path.toLowerCase(Locale.ROOT).endsWith(".png")) continue;
+            String lang = b.isNull("iso_639_1") ? "" : b.optString("iso_639_1");
+            int rank = lang.equals(Ui.language) ? 3 : lang.equals("en") ? 2 : lang.isEmpty() ? 1 : 0;
+            if (rank == 0) continue;
+            double score = rank * 1e6 + Math.min(b.optInt("width"), 2000) * 10 + b.optDouble("vote_average", 0);
+            if (score > bestScore) {
+                bestScore = score;
+                best = path;
+            }
+        }
+        return best;
+    }
+
     private static String bestBackdrop(JSONObject images) {
         JSONArray list = images == null ? null : images.optJSONArray("backdrops");
         String best = null;
@@ -802,7 +876,8 @@ final class Recs {
 
     private void downloadPoster(Pick p) throws IOException {
         fetch(posterFile(p), POSTERS + p.poster);
-        if (!p.top) fetch(coverFile(p), COVERS + p.cover);   // the Top 10's main image is the cover already
+        if (!p.top && !p.cover.equals(p.backdrop)) fetch(coverFile(p), COVERS + p.cover);   // else the main image is the cover
+        fetch(logoFile(p), LOGOS + p.logo);
     }
 
     private static void fetch(File f, String url) throws IOException {
@@ -844,8 +919,12 @@ final class Recs {
             if (forLight && pf != null && pf.exists()) poster = BitmapFactory.decodeFile(pf.getPath());   // null if unreadable
             Bitmap cover = null;
             File cf = coverFile(p);
-            if (forLight && !p.top && cf != null && cf.exists()) cover = BitmapFactory.decodeFile(cf.getPath());
-            Backdrop backdrop = Backdrop.make(b, forLight, poster, cover, p.top);
+            if (forLight && !p.top && !p.cover.equals(p.backdrop) && cf != null && cf.exists()) cover = BitmapFactory.decodeFile(cf.getPath());
+            Bitmap logo = null;
+            File lf = logoFile(p);
+            if (forLight && lf != null && lf.exists()) logo = BitmapFactory.decodeFile(lf.getPath());
+            Backdrop backdrop = Backdrop.make(b, forLight, poster, cover, p.top, p.coverClean ? logo : null, p.posterClean ? logo : null);
+            if (logo != null) logo.recycle();
             if (forLight != light) return;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(imageKey(p), backdrop);
@@ -885,7 +964,8 @@ final class Recs {
         JSONArray a = new JSONArray();
         for (Pick p : list) {
             a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop)
-                    .put("cover", p.cover).put("poster", p.poster)
+                    .put("cover", p.cover).put("poster", p.poster).put("logo", p.logo)
+                    .put("posterClean", p.posterClean).put("coverClean", p.coverClean)
                     .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                     .put("detailed", p.detailed).put("top", p.top).put("taste", p.taste));
         }
@@ -904,6 +984,9 @@ final class Recs {
             p.backdrop = o.optString("backdrop");
             p.poster = o.optString("poster");
             p.cover = o.optString("cover");
+            p.logo = o.optString("logo");
+            p.posterClean = o.optBoolean("posterClean");
+            p.coverClean = o.optBoolean("coverClean");
             p.meta = o.optString("meta");
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");

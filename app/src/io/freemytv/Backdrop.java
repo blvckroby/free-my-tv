@@ -50,7 +50,7 @@ final class Backdrop {
         nightImage = night == null ? null : Bitmap.createBitmap(night, FW, FH, Bitmap.Config.ARGB_8888);
     }
 
-    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster, Bitmap cover, boolean top) {
+    static Backdrop make(Bitmap src, boolean forLight, Bitmap poster, Bitmap cover, boolean top, Bitmap logoWide, Bitmap logoTall) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -66,9 +66,9 @@ final class Backdrop {
             // The wide card shows TMDB's own horizontal cover, cropped a little above the middle (faces and titles
             // sit high); the tall ones, its poster.
             // Top 10: the selected card is a 16:9-ish "feature" instead of the wide one.
-            Bitmap wide = top ? null : card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f);
-            Bitmap feature = top ? card(out, FEATURE_W, FEATURE_H, 0.38f) : null;
-            Bitmap tall = card(poster != null ? poster : out, TALL_W, TALL_H, 0.4f);
+            Bitmap wide = top ? null : card(cover != null ? cover : out, WIDE_W, WIDE_H, 0.38f, logoWide, true);
+            Bitmap feature = top ? card(out, FEATURE_W, FEATURE_H, 0.38f, logoWide, true) : null;
+            Bitmap tall = card(poster != null ? poster : out, TALL_W, TALL_H, 0.4f, logoTall, false);
             if (poster != null) poster.recycle();
             if (cover != null) cover.recycle();
             int[] frost = reduce(out, FW, FH, 3, 3);
@@ -155,7 +155,7 @@ final class Backdrop {
     }
 
     /** The photo at the card's aspect ratio, filtered down (halving while possible) to the exact size. */
-    private static Bitmap card(Bitmap full, int w, int h, float bias) {
+    private static Bitmap card(Bitmap full, int w, int h, float bias, Bitmap logo, boolean wide) {
         float ratio = (float) w / h;
         int cw = Math.min(full.getWidth(), Math.round(full.getHeight() * ratio));
         int ch = Math.min(full.getHeight(), Math.round(cw / ratio));
@@ -167,7 +167,29 @@ final class Backdrop {
         }
         Bitmap out = Bitmap.createScaledBitmap(b, w, h, true);
         if (b != full && b != out) b.recycle();
-        return gpu(out);
+        return gpu(logo == null ? out : withLogo(out, logo, wide));
+    }
+
+    /**
+     * The title's logo over the textless picture, with a soft dark gradient behind it so a white logo reads on any
+     * photo: centered near the bottom of a poster, at the bottom right of a wide card.
+     */
+    private static Bitmap withLogo(Bitmap base, Bitmap logo, boolean wide) {
+        Bitmap m = base.copy(Bitmap.Config.ARGB_8888, true);
+        if (m == null) return base;
+        int w = m.getWidth(), h = m.getHeight();
+        Canvas c = new Canvas(m);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        p.setShader(new LinearGradient(0, h, 0, h * (wide ? 0.5f : 0.55f),
+                new int[] {black(wide ? 0.6f : 0.68f), black(wide ? 0.25f : 0.3f), 0}, new float[] {0, 0.55f, 1}, Shader.TileMode.CLAMP));
+        c.drawRect(0, h * 0.4f, w, h, p);
+        p.setShader(null);
+        float boxW = w * (wide ? 0.34f : 0.76f), boxH = h * (wide ? 0.26f : 0.16f);
+        float scale = Math.min(boxW / logo.getWidth(), boxH / logo.getHeight());
+        float lw = logo.getWidth() * scale, lh = logo.getHeight() * scale;
+        float right = wide ? w - w * 0.035f : (w + lw) / 2, bottom = h - h * (wide ? 0.07f : 0.065f);
+        c.drawBitmap(logo, null, new RectF(right - lw, bottom - lh, right, bottom), p);
+        return m;
     }
 
     /** Copies it to GPU memory (cheap to draw; the process doesn't keep the pixels). */

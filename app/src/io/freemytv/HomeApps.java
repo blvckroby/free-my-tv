@@ -59,6 +59,8 @@ final class HomeApps {
     static final int INPUTS = 7;
     /** The profile button: opens the TV's accounts. */
     static final int PROFILE = 8;
+    /** The Sport button: the day's events (SportsActivity). */
+    static final int SPORTS = 9;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -369,6 +371,9 @@ final class HomeApps {
                 break;
             case ANDROID_SETTINGS:
                 intent = new Intent(Settings.ACTION_SETTINGS);
+                break;
+            case SPORTS:
+                intent = new Intent().setComponent(new ComponentName(a, SportsActivity.class));
                 break;
             case PROFILE:
                 intent = new Intent(Settings.ACTION_SYNC_SETTINGS);

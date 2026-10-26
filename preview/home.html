@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Free My TV · anteprima</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: F1; font-display: swap;
+    src: url('fonts/Formula1-Black.woff2') format('woff2'), url('https://www.formula1.com/s/fonts/formula1/Formula1-Black.woff2') format('woff2'); }
+  @font-face { font-family: MGP; font-display: swap;
+    src: url('fonts/MGPDisplay-Bold.woff2') format('woff2'), url('https://www.motogp.com/resources/v8.28.8/fonts/MGPDisplay-Bold.woff2') format('woff2'); }
+  .flag { position: absolute; bottom: 44px; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2.5px solid rgba(255,255,255,.7); box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .sport .flag.motogp { top: 44px; bottom: auto; border: 1px solid #fff; }
+  .sport .place.motogp { top: 44px; bottom: auto; }
+  .place { position: absolute; bottom: 44px; font-size: 36px; font-weight: 500; line-height: 56px; }
+  #agenda { position: absolute; inset: 0; background: linear-gradient(#16161C, #07070A); display: none; z-index: 30; color: #fff; overflow: hidden; }
+  #agenda h2 { position: absolute; left: 80px; top: 62px; font-size: 70px; font-weight: 600; line-height: 90px; }
+  #agenda .day { position: absolute; right: 80px; top: 76px; font-size: 40px; font-weight: 500; color: rgba(255,255,255,.9); cursor: pointer; }
+  #agenda .list { position: absolute; left: 80px; right: 80px; top: 190px; bottom: 60px; overflow-y: auto; }
+  #agenda .hd { display: flex; align-items: center; gap: 16px; height: 74px; padding-top: 18px; font-size: 28px; font-weight: 600; letter-spacing: .12em; color: rgba(255,255,255,.8); text-transform: uppercase; }
+  #agenda .hd i { width: 8px; height: 26px; border-radius: 4px; display: block; }
+  #agenda .ev { display: flex; align-items: center; height: 92px; padding: 0 6px; border-radius: 20px; font-size: 32px; font-weight: 600; }
+  #agenda .ev:hover { background: rgba(255,255,255,.18); }
+  #agenda .ev .t { width: 170px; font-size: 36px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  #agenda .ev .s { display: flex; align-items: center; gap: 16px; flex: 0 1 460px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #agenda .ev .s img { width: 52px; height: 52px; object-fit: contain; }
+  #agenda .ev .v { width: 80px; text-align: center; color: rgba(255,255,255,.6); font-weight: 500; }
+  #agenda .msg { color: rgba(255,255,255,.6); font-size: 30px; padding-top: 30px; }
+  #agenda .help { position: absolute; left: 80px; bottom: 18px; font-size: 24px; color: rgba(255,255,255,.5); }
+  #gallery { position: absolute; inset: 0; background: rgba(10,10,12,.94); display: none; z-index: 20; color: #fff; }
+  #gallery h2 { position: absolute; left: 80px; top: 46px; font-size: 44px; font-weight: 600; }
+  #gallery .hint { position: absolute; right: 80px; top: 62px; font-size: 24px; color: #aaa; }
+  #gallery .cell { position: absolute; width: 1040px; height: 442px; transform: scale(.55); transform-origin: 0 0; cursor: pointer; }
+  #gallery .cell .card { top: 0; left: 0 !important; width: 1040px !important; transition: none; }
+  #gallery .lab { position: absolute; font-size: 26px; font-weight: 600; color: #ddd; }
+  :root { --ink:#1d1d1f; --dim:#6e6e73; --faint:#8e8e93; --glass:rgba(255,255,255,.55); }
+  .night { --ink:#fff; --dim:#8e8e93; --faint:rgba(255,255,255,.7); --glass:rgba(40,40,44,.55); }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: #111; overflow: hidden; font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden;
+           background: linear-gradient(#f5f5f7, #e2e2e7); color: var(--ink); transition: background .6s; }
+  #stage.night { background: linear-gradient(#1c1c1e, #0b0b0d); }
+  #bg { position: absolute; inset: 0; opacity: .5; transition: background .8s; filter: blur(80px); }
+  .abs { position: absolute; }
+  #title { left: 80px; top: 62px; font-size: 76px; font-weight: 600; letter-spacing: .004em; line-height: 90px; }
+  #clock { left: 0; width: 1920px; top: 62px; text-align: center; font-size: 64px; font-weight: 600; letter-spacing: .004em; line-height: 90px; pointer-events: none; }
+  .tab { top: 158px; height: 68px; padding: 0 26px; border-radius: 34px; font-size: 30px; font-weight: 500; line-height: 68px; color: var(--dim); cursor: pointer; }
+  .tab.on { color: var(--ink); font-weight: 600; }
+  .btn { top: 69px; width: 68px; height: 68px; border-radius: 34px; background: var(--glass); backdrop-filter: blur(20px); overflow: hidden;
+         box-shadow: 0 6px 26px rgba(0,0,0,.12), inset 0 0 0 1px rgba(255,255,255,.35); display: grid; place-items: center; }
+  .btn svg { width: 30px; height: 30px; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #avatar { background: #4285f4; color: #fff; font-weight: 600; font-size: 34px; }
+  #avatar img { width: 100%; height: 100%; object-fit: cover; }
+  #caption { right: 80px; top: 158px; height: 68px; line-height: 68px; font-size: 30px; font-weight: 500; color: var(--dim); }
+  .card { position: absolute; top: 262px; height: 442px; border-radius: 18px; overflow: hidden; background: #2c2c2e;
+          box-shadow: 0 24px 50px rgba(0,0,0,.28); transition: left .5s cubic-bezier(.3,.8,.3,1), width .5s cubic-bezier(.3,.8,.3,1), transform .25s, box-shadow .25s; }
+  .card.focus { transform: translateY(-6px) scale(1.04); box-shadow: 0 34px 70px rgba(0,0,0,.4), 0 0 0 3px rgba(255,255,255,.85) inset; }
+  .cap { position: absolute; top: 718px; font-size: 31px; font-weight: 600; white-space: nowrap; transition: left .5s cubic-bezier(.3,.8,.3,1); }
+  .cap small { display: block; font-size: 25px; font-weight: 500; color: var(--dim); margin-top: 6px; }
+  .layer { position: absolute; inset: 0; background-size: cover; background-position: center 38%; transition: opacity .45s; }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,.25) 28%, rgba(0,0,0,0) 55%); }
+  .lg { position: absolute; object-fit: contain; transition: opacity .45s; filter: drop-shadow(0 2px 10px rgba(0,0,0,.5)); }
+  .lg.p { left: 12%; width: 76%; bottom: 6.5%; height: 16%; object-position: center bottom; }
+  .lg.w { right: 3.5%; width: 34%; bottom: 7%; height: 26%; object-position: right bottom; }
+  .ttl { position: absolute; color: #fff; font-weight: 600; text-shadow: 0 2px 14px rgba(0,0,0,.55); transition: opacity .45s; }
+  .ttl.p { left: 0; right: 0; bottom: 34px; font-size: 34px; text-align: center; }
+  .ttl.w { right: 40px; bottom: 30px; font-size: 44px; text-align: right; }
+  .rank { position: absolute; left: 20px; top: 6px; font-size: 84px; font-weight: 600; color: #fff; text-shadow: 0 3px 9px rgba(0,0,0,.8); line-height: 1.1; }
+  .card .p { opacity: 1; } .card .w { opacity: 0; }
+  .card.sel .p { opacity: 0; } .card.sel .w { opacity: 1; }
+  .sport { color: #fff; text-align: center; background-size: cover; }
+  .sport .art { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .sport .tint { position: absolute; inset: 0; }
+  .sport .comp { position: absolute; left: 0; right: 0; top: 28px; height: 80px; display: flex; justify-content: center; align-items: center;
+                 font-size: 34px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .sport .comp img { max-width: 300px; max-height: 80px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,.35)); }
+  .sport .crest { position: absolute; top: 124px; width: 190px; height: 190px; display: grid; place-items: center; font-size: 84px; font-weight: 600; border-radius: 50%; background: rgba(255,255,255,.2); }
+  .sport .crest img { width: 100%; height: 100%; object-fit: contain; }
+  .sport .nm { position: absolute; top: 346px; width: 440px; font-size: 27px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sport .when { position: absolute; left: 0; right: 0; top: 200px; font-size: 36px; font-weight: 500; }
+  #platter { left: 80px; top: 814px; width: 1760px; height: 168px; border-radius: 44px; background: var(--glass); backdrop-filter: blur(30px);
+             box-shadow: 0 20px 60px rgba(0,0,0,.14), inset 0 0 0 1px rgba(255,255,255,.4); }
+  .tile { position: absolute; top: 21px; width: 204px; height: 126px; border-radius: 22px; display: grid; place-items: center; color: #fff; font-weight: 600; box-shadow: 0 10px 26px rgba(0,0,0,.25); }
+  #quote { right: 100px; top: 740px; font-size: 21px; color: var(--faint); }
+  #bar { position: fixed; left: 12px; bottom: 10px; right: 12px; display: flex; gap: 8px; align-items: center; z-index: 9; font: 12px/1.4 system-ui, sans-serif; color: #ccc; }
+  #bar span, #bar button { background: rgba(0,0,0,.6); padding: 6px 10px; border-radius: 8px; border: 0; color: #ccc; font: inherit; cursor: pointer; }
+  #panel { position: fixed; right: 12px; bottom: 48px; width: 360px; background: #1c1c1e; color: #ddd; border-radius: 14px; padding: 16px; z-index: 10; display: none; font: 13px/1.4 system-ui, sans-serif; max-height: 80vh; overflow: auto; }
+  #panel label { display: block; margin-top: 10px; color: #aaa; font-size: 12px; }
+  #panel input, #panel select { width: 100%; padding: 7px 8px; border-radius: 8px; border: 1px solid #444; background: #2c2c2e; color: #fff; margin-top: 3px; }
+  #panel button { margin-top: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: #0a84ff; color: #fff; font-weight: 600; cursor: pointer; }
+  #panel p { color: #999; margin-top: 10px; font-size: 12px; }
+  #log { white-space: pre-wrap; font: 11px/1.5 ui-monospace, monospace; color: #9fe39f; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="abs"></div>
+  <div id="title" class="abs">Per te</div>
+  <div id="clock" class="abs"></div>
+  <div id="tabs"></div>
+  <div id="caption" class="abs"></div>
+  <div id="btns"></div>
+  <div id="cards"></div>
+  <div id="platter" class="abs"></div>
+  <div id="quote" class="abs"></div>
+  <div id="gallery"></div>
+  <div id="agenda"></div>
+</div>
+<div id="bar">
+  <button id="gear">⚙ Impostazioni e dati veri</button>
+  <span id="status">Dati di esempio: apri le impostazioni e inserisci la chiave TMDB</span>
+  <button id="gal">▦ Prova tutti gli sport (G)</button><span>← → muovi · 1 2 3 schede · S evento sport · G galleria sport · N giorno/notte · D dati</span>
+</div>
+<div id="panel">
+  <b>Dati reali</b>
+  <p>Tutto resta nel tuo browser (localStorage): chiavi e sessione non vanno da nessuna parte tranne che ai rispettivi servizi.</p>
+  <label>Chiave TMDB (API key o Read Access Token)<input id="f-key" type="password" autocomplete="off"></label>
+  <label>Sessione TMDB (facoltativa, per i tuoi gusti in Esplora)<input id="f-session" type="password" autocomplete="off"></label>
+  <label>Paese (2 lettere)<input id="f-region" maxlength="2"></label>
+  <label>Lingua<select id="f-lang"><option value="it">Italiano</option><option value="en">English</option><option value="es">Español</option><option value="pt">Português</option></select></label>
+  <label>Chiave football-data.org (Serie A e Champions; può essere bloccata dal browser)<input id="f-football" type="password" autocomplete="off"></label>
+  <label>Foto profilo (link)<input id="f-photo"></label>
+  <label>Nome profilo<input id="f-name"></label>
+  <label>Font F1 e MotoGP (se non si vedono): scarica i file .woff2 dai link e sceglili qui; restano salvati nel browser
+    <input id="f-font-f1" type="file" accept=".woff2,.woff,.ttf,.otf" title="Formula1-Black.woff2">
+    <input id="f-font-mgp" type="file" accept=".woff2,.woff,.ttf,.otf" title="MGPDisplay-Bold.woff2" style="margin-top:6px"></label>
+  <p><a style="color:#6cf" href="https://www.formula1.com/s/fonts/formula1/Formula1-Black.woff2" target="_blank">Formula1-Black.woff2</a> ·
+     <a style="color:#6cf" href="https://www.motogp.com/resources/v8.28.8/fonts/MGPDisplay-Bold.woff2" target="_blank">MGPDisplay-Bold.woff2</a> (tasto destro: salva con nome)</p>
+  <button id="f-go">Carica dati</button> <button id="f-test" style="background:#444">Test loghi</button>
+  <div id="log"></div>
+</div>
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  function fit() { var s = Math.min(innerWidth / 1920, (innerHeight - 40) / 1080); stage.style.transform = 'scale(' + s + ')';
+    stage.style.left = (innerWidth - 1920 * s) / 2 + 'px'; stage.style.top = '0px'; }
+  addEventListener('resize', fit); fit();
+
+  // ---------- settings ----------
+  var cfg = { key: '', session: '', region: 'IT', lang: 'it', football: '', photo: '', name: 'R' };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem('fmtv') || '{}')); } catch (e) {}
+  var ids = { key: 'f-key', session: 'f-session', region: 'f-region', lang: 'f-lang', football: 'f-football', photo: 'f-photo', name: 'f-name' };
+  Object.keys(ids).forEach(function (k) { document.getElementById(ids[k]).value = cfg[k]; });
+  document.getElementById('gear').onclick = function () { var p = document.getElementById('panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; };
+  var logEl = document.getElementById('log');
+  function log(s) { logEl.textContent += s + '\n'; console.log(s); }
+  function status(s) { document.getElementById('status').textContent = s; }
+
+  // ---------- texts ----------
+  var TXT = {
+    it: { title: 'Per te', tabs: ['Esplora', 'Film', 'Serie TV'], top: 'Top 10 in ', today: 'Oggi', tomorrow: 'Domani', live: 'In diretta', quali: 'Qualifiche', race: 'Gara', series: 'Serie', seasons: ['stagione', 'stagioni'], loc: 'it-IT', tm: 'it-IT' },
+    en: { title: 'For You', tabs: ['Explore', 'Movies', 'Shows'], top: 'Top 10 in ', today: 'Today', tomorrow: 'Tomorrow', live: 'Live now', quali: 'Qualifying', race: 'Race', series: 'Series', seasons: ['season', 'seasons'], loc: 'en-US', tm: 'en-US' },
+    es: { title: 'Para ti', tabs: ['Explorar', 'Películas', 'Series'], top: 'Top 10 en ', today: 'Hoy', tomorrow: 'Mañana', live: 'En vivo', quali: 'Clasificación', race: 'Carrera', series: 'Serie', seasons: ['temporada', 'temporadas'], loc: 'es-ES', tm: 'es-ES' },
+    pt: { title: 'Para você', tabs: ['Explorar', 'Filmes', 'Séries'], top: 'Top 10 em ', today: 'Hoje', tomorrow: 'Amanhã', live: 'Ao vivo', quali: 'Classificação', race: 'Corrida', series: 'Série', seasons: ['temporada', 'temporadas'], loc: 'pt-BR', tm: 'pt-BR' }
+  };
+  function T() { return TXT[cfg.lang] || TXT.it; }
+
+  // ---------- placeholder data (until real data is loaded) ----------
+  function ph(t, c1, c2, meta) { return { title: t, c1: c1, c2: c2, meta: meta || '' }; }
+  var data = {
+    movies: [ph('Il Gladiatore II', '#c0392b', '#2c0b0b', 'Azione · Prime Video'), ph('Dune: Parte Due', '#d9a441', '#3b2a0c', 'Fantascienza · Netflix'), ph('Inside Out 2', '#6c5ce7', '#1b1240', 'Animazione · Disney+'),
+             ph('Oppenheimer', '#e67e22', '#1c0d02', 'Dramma · Prime Video'), ph('Gran Turismo', '#16a085', '#05211c', 'Azione · Netflix'), ph('Barbie', '#ff4fa3', '#4a0b2c', 'Commedia · Netflix'),
+             ph('Interstellar', '#2d6cdf', '#06142e', 'Fantascienza'), ph('Joker', '#27ae60', '#07200f', 'Thriller'), ph('Avatar', '#00b8d9', '#021f27', 'Fantascienza'), ph('Top Gun: Maverick', '#95a5a6', '#1b2224', 'Azione')],
+    shows: [ph('The Boys', '#e74c3c', '#2a0707', 'Serie · Prime Video'), ph('Stranger Things', '#d63031', '#1a0505', 'Serie · Netflix'), ph('Il Trono di Spade', '#8395a7', '#10161c', 'Serie'),
+            ph('Breaking Bad', '#27ae60', '#06200d', 'Serie'), ph('Succession', '#5f6c7b', '#0d1117', 'Serie'), ph('The Bear', '#f39c12', '#2a1a02', 'Serie'),
+            ph('Squid Game', '#ff2e93', '#2b0418', 'Serie'), ph('Black Mirror', '#34495e', '#06090d', 'Serie'), ph('Shogun', '#b33939', '#1d0707', 'Serie'), ph('Gomorra', '#7f8c8d', '#121516', 'Serie')],
+    explore: [ph('Dune: Parte Due', '#d9a441', '#3b2a0c'), ph('Inside Out 2', '#6c5ce7', '#1b1240')],
+    sports: [
+      { sport: 1, comp: 'UEFA Champions League', start: Date.now() + 3600e3, minutes: 115, home: 'Inter', away: 'Barcellona', logoComp: '', logoHome: '', logoAway: '', art: '../app/assets/sports/champions.webp', c1: '#1b2a8a', c2: '#0b1250', italian: 3 },
+      { sport: 2, comp: 'UEFA Europa League', start: Date.now() - 600e3, minutes: 115, home: 'Roma', away: 'Ajax', logoComp: '', logoHome: '', logoAway: '', art: '../app/assets/sports/europa.jpg', c1: '#e8650a', c2: '#2a0f02', italian: 3 },
+      { sport: 0, comp: 'Serie A', start: Date.now() + 20 * 3600e3, minutes: 115, home: 'Milan', away: 'Napoli', logoComp: '', logoHome: '', logoAway: '', art: '../app/assets/sports/seriea.webp', c1: '#0b5fa5', c2: '#052a4a', italian: 3 },
+      { sport: 3, comp: 'Formula 1', start: Date.now() + 26 * 3600e3, minutes: 120, title: "Gran Premio d'Italia · Gara", logoComp: '', art: '../app/assets/sports/f1.webp', country: 'it', place: 'Monza', c1: '#14141C', c2: '#14141C', italian: 3 },
+      { sport: 4, comp: 'MotoGP', start: Date.now() + 27 * 3600e3, minutes: 75, title: "Gran Premio d'Italia · Gara", logoComp: '', art: '../app/assets/sports/motogp.webp', country: 'it', place: 'Mugello', c1: '#0E0E12', c2: '#0E0E12', italian: 3 }
+    ]
+  };
+  data.sports.forEach(function (e) { e.sample = true; });
+  var SERIEA = '../app/assets/sports/seriea.webp';
+  var ACCENT = [['#28519F', '#38A8BC'], ['#1b2a8a', '#0b1250'], ['#e8650a', '#2a0f02'], ['#14141C', '#14141C'], ['#0E0E12', '#0E0E12'], ['#2e8b57', '#0b2a1a'], ['#37003C', '#12001a'], ['#EE8707', '#3a2000'], ['#D3010C', '#2a0003'], ['#091C3E', '#030a18']];
+
+  // ---------- state & chrome ----------
+  var tab = 0, idx = 0, sportIdx = -1, night = false;
+  var tabsEl = document.getElementById('tabs'), cardsEl = document.getElementById('cards'), captionEl = document.getElementById('caption'), bgEl = document.getElementById('bg');
+  var APPS = [['Netflix', '#e50914'], ['YouTube', '#ff0033'], ['Prime Video', '#1a98ff'], ['Nuvio TV', '#8b5cf6'], ['Mono Player', '#22a7f0'], ['Disney+', '#1838c8'], ['Apple TV', '#8a8d96'], ['Spotify', '#1db954']];
+  var ICONS = ['<path d="M3 6h18v12H3zM8 21h8"/>', '<path d="M4 6h16v12H4zM8 10h2M14 10h2"/>', '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/>'];
+  var btns = document.getElementById('btns'), right = 1840;
+  var BALL = '<circle cx="12" cy="12" r="9"/><path d="M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4zM12 8.2V3.2M15.4 10.7l4.6-1.6M14.1 14.7l2.9 4M9.9 14.7l-2.9 4M8.6 10.7L4 9.1"/>';
+  for (var b = 4; b >= 0; b--) {
+    var e = document.createElement('div'); e.className = 'btn abs'; e.style.left = (right - 68) + 'px'; right -= 88;
+    if (b === 4) e.id = 'avatar'; else if (b === 3) { e.innerHTML = '<svg viewBox="0 0 24 24">' + BALL + '</svg>'; e.style.cursor = 'pointer'; e.title = 'Sport'; e.onclick = function () { openAgenda(); }; }
+    else e.innerHTML = '<svg viewBox="0 0 24 24">' + ICONS[b] + '</svg>';
+    btns.appendChild(e);
+  }
+  function avatar() {
+    var a = document.getElementById('avatar'); a.innerHTML = '';
+    if (cfg.photo) { var i = document.createElement('img'); i.src = cfg.photo; i.onerror = function () { a.textContent = (cfg.name || 'R')[0].toUpperCase(); }; a.appendChild(i); }
+    else a.textContent = (cfg.name || 'R')[0].toUpperCase();
+  }
+  var platter = document.getElementById('platter');
+  APPS.forEach(function (a, i) {
+    var t = document.createElement('div'); t.className = 'tile'; t.textContent = a[0]; t.style.left = (24 + i * 218) + 'px';
+    t.style.background = 'linear-gradient(145deg,' + a[1] + ',#000 160%)'; t.style.fontSize = a[0].length > 9 ? '25px' : '30px'; platter.appendChild(t);
+  });
+  function drawTabs() {
+    tabsEl.innerHTML = ''; var x = 54;
+    T().tabs.forEach(function (t, i) {
+      var d = document.createElement('div'); d.className = 'tab abs' + (i === tab ? ' on' : ''); d.textContent = t; d.onclick = function () { setTab(i); };
+      tabsEl.appendChild(d); d.style.left = x + 'px'; x += d.offsetWidth + 4;
+    });
+    document.getElementById('title').textContent = T().title;
+  }
+  function clock() { var d = new Date(); document.getElementById('clock').textContent = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  clock(); setInterval(clock, 15000);
+
+  // ---------- TMDB (the same choices as the app: textless images + the title's logo in your language) ----------
+  var IMG = 'https://image.tmdb.org/t/p/';
+  function tmdb(path) {
+    var bearer = cfg.key.indexOf('eyJ') === 0;
+    var url = 'https://api.themoviedb.org/3' + path + (bearer ? '' : (path.indexOf('?') >= 0 ? '&' : '?') + 'api_key=' + encodeURIComponent(cfg.key));
+    return fetch(url, bearer ? { headers: { Authorization: 'Bearer ' + cfg.key } } : {}).then(function (r) { if (!r.ok) throw new Error('TMDB ' + r.status + ' ' + path.split('?')[0]); return r.json(); });
+  }
+  function bestImage(list) { // textless only
+    var best = null, score = -1;
+    (list || []).forEach(function (b) { if (b.iso_639_1 !== null || !b.file_path) return; var s = Math.min(b.width, 3840) * 100 + (b.vote_average || 0); if (s > score) { score = s; best = b.file_path; } });
+    return best;
+  }
+  function bestLogo(list) {
+    var best = null, score = -1;
+    (list || []).forEach(function (b) {
+      if (!b.file_path || !/\.png$/i.test(b.file_path)) return;
+      var l = b.iso_639_1 === null ? '' : b.iso_639_1, rank = l === cfg.lang ? 3 : l === 'en' ? 2 : l === '' ? 1 : 0; if (!rank) return;
+      var s = rank * 1e6 + Math.min(b.width, 2000) * 10 + (b.vote_average || 0); if (s > score) { score = s; best = b.file_path; }
+    });
+    return best;
+  }
+  function details(kind, o) {
+    return tmdb('/' + kind + '/' + o.id + '?language=' + T().tm + '&append_to_response=watch/providers,images&include_image_language=null,' + cfg.lang + ',en').then(function (d) {
+      var im = d.images || {}, logo = bestLogo(im.logos), cleanB = bestImage(im.backdrops), cleanP = bestImage(im.posters);
+      var parts = [];
+      if (kind === 'tv') parts.push(T().series);
+      if (d.genres && d.genres[0]) parts.push(d.genres[0].name);
+      if (kind === 'movie' && d.runtime) parts.push(Math.floor(d.runtime / 60) + ' h ' + (d.runtime % 60) + ' min');
+      if (kind === 'tv' && d.number_of_seasons) parts.push(d.number_of_seasons + ' ' + T().seasons[d.number_of_seasons === 1 ? 0 : 1]);
+      var pr = d['watch/providers'] && d['watch/providers'].results && d['watch/providers'].results[cfg.region.toUpperCase()];
+      if (pr && pr.flatrate && pr.flatrate[0]) parts.push(pr.flatrate[0].provider_name);
+      var item = { title: d.title || d.name || o.title || o.name, meta: parts.join(' · '),
+        backdrop: IMG + 'w1280' + (cleanB || d.backdrop_path || o.backdrop_path), backdropClean: !!(cleanB && logo),
+        poster: IMG + 'w780' + (cleanP && logo ? cleanP : (d.poster_path || o.poster_path)), posterClean: !!(cleanP && logo),
+        logo: logo ? IMG + 'w500' + logo : '', c1: '#555', c2: '#111' };
+      return item;
+    });
+  }
+  function top(kind) {
+    return tmdb('/discover/' + kind + '?language=' + T().tm + '&region=' + cfg.region + '&watch_region=' + cfg.region
+      + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false&sort_by=popularity.desc&vote_count.gte=50').then(function (r) {
+      var picks = r.results.filter(function (o) { return o.backdrop_path && o.poster_path; }).slice(0, 10);
+      return Promise.all(picks.map(function (o) { return details(kind, o).catch(function () { return null; }); }));
+    }).then(function (l) { return l.filter(Boolean); });
+  }
+  function taste() {
+    if (!cfg.session) return Promise.resolve([]);
+    var s = 'session_id=' + encodeURIComponent(cfg.session);
+    return tmdb('/account?' + s).then(function (acc) {
+      var jobs = [];
+      ['movie', 'tv'].forEach(function (k) {
+        var p = k === 'movie' ? 'movies' : 'tv';
+        jobs.push(tmdb('/account/' + acc.id + '/watchlist/' + p + '?language=' + T().tm + '&' + s).then(function (r) { return r.results.slice(0, 4).map(function (o) { return { k: k, o: o }; }); }));
+        jobs.push(tmdb('/account/' + acc.id + '/favorite/' + p + '?' + s).then(function (r) { return r.results.slice(0, 3).map(function (o) { return { k: k, o: o, seed: true }; }); }));
+      });
+      return Promise.all(jobs);
+    }).then(function (groups) {
+      var all = [].concat.apply([], groups), seeds = all.filter(function (x) { return x.seed; }).slice(0, 4), mine = all.filter(function (x) { return !x.seed; });
+      return Promise.all(seeds.map(function (x) { return tmdb('/' + x.k + '/' + x.o.id + '/recommendations?language=' + T().tm).then(function (r) { return r.results.slice(0, 3).map(function (o) { return { k: x.k, o: o }; }); }); }))
+        .then(function (rec) { return mine.concat([].concat.apply([], rec)); });
+    }).then(function (cands) {
+      var seen = {}; cands = cands.filter(function (c) { var key = c.k + c.o.id; if (seen[key] || !c.o.backdrop_path || !c.o.poster_path) return false; return (seen[key] = true); }).slice(0, 6);
+      return Promise.all(cands.map(function (c) { return details(c.k, c.o).catch(function () { return null; }); }));
+    }).then(function (l) { return l.filter(Boolean); }).catch(function (e) { log('profilo TMDB: ' + e.message); return []; });
+  }
+  function trending() {
+    return tmdb('/trending/movie/week?language=' + T().tm).then(function (r) {
+      return Promise.all(r.results.filter(function (o) { return o.backdrop_path && o.poster_path; }).slice(0, 2).map(function (o) { return details('movie', o); }));
+    });
+  }
+
+  // ---------- sports (the same sources and rules as Sports.java) ----------
+  var DUR = { 0: 115, 1: 115, 2: 115, 3: 120, 4: 75, 5: 180, 6: 115, 7: 115, 8: 115, 9: 115 };
+  var CLUBS = ['inter', 'milan', 'juventus', 'napoli', 'roma', 'lazio', 'atalanta', 'fiorentina', 'bologna', 'torino', 'genoa', 'udinese'];
+  var PLAYERS = ['sinner', 'musetti', 'berrettini', 'paolini', 'cobolli', 'arnaldi', 'darderi', 'errani', 'cocciaretto', 'sonego', 'fognini', 'bellucci', 'nardi', 'passaro'];
+  function hasAny(text, list) { text = (text || '').toLowerCase(); return list.some(function (x) { return text.indexOf(x) >= 0; }); }
+  function jget(url, headers) { return fetch(url, headers ? { headers: headers } : {}).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }
+  function day(t) { return new Date(t).toISOString().slice(0, 10); }
+  function ts(s) { var t = Date.parse((s || '').slice(0, 19) + 'Z'); return isNaN(t) ? 0 : t; }
+  function league(id, must) {
+    return jget('https://www.thesportsdb.com/api/v1/json/3/lookupleague.php?id=' + id).then(function (r) {
+      var l = r.leagues && r.leagues[0];
+      if (l && (l.strLeague || '').toLowerCase().indexOf(must) >= 0) return { logo: l.strBadge || l.strLogo || '', art: l.strFanart1 || l.strBanner || '' };
+      return { logo: '', art: '' };
+    }).catch(function () { return { logo: '', art: '' }; });
+  }
+  var COUNTRIES = [['italy','it'],['italia','it'],['italian','it'],['emilia','it'],['mugello','it'],['monza','it'],['misano','it'],['imola','it'],['san marino','sm'],['spain','es'],['spagna','es'],['spanish','es'],['catalan','es'],['catalunya','es'],['aragon','es'],['valencia','es'],['jerez','es'],['french','fr'],['german','de'],['british','gb'],['silverstone','gb'],['dutch','nl'],['belgian','be'],['austrian','at'],['hungarian','hu'],['portuguese','pt'],['thai','th'],['chinese','cn'],['miami','us'],['las vegas','us'],['argentin','ar'],['mexic','mx'],['canad','ca'],['france','fr'],['germany','de'],['great britain','gb'],['united kingdom','gb'],['uk','gb'],['netherlands','nl'],['belgium','be'],['austria','at'],['hungary','hu'],['czech','cz'],['portugal','pt'],['qatar','qa'],['thailand','th'],['malaysia','my'],['japan','jp'],['australia','au'],['indonesia','id'],['india','in'],['argentina','ar'],['united states','us'],['usa','us'],['america','us'],['brazil','br'],['mexico','mx'],['canada','ca'],['monaco','mc'],['azerbaijan','az'],['singapore','sg'],['saudi','sa'],['bahrain','bh'],['emirates','ae'],['uae','ae'],['abu dhabi','ae'],['china','cn'],['korea','kr'],['turk','tr'],['kazakhstan','kz'],['finland','fi'],['sweden','se'],['switzerland','ch'],['vietnam','vn'],['russia','ru']];
+  function iso(c) { c = (c || '').toLowerCase(); for (var i = 0; i < COUNTRIES.length; i++) if (c.indexOf(COUNTRIES[i][0]) >= 0) return COUNTRIES[i][1]; return ''; }
+  function mk(sport, start, comp, title) { return { sport: sport, start: start, minutes: DUR[sport], comp: comp, title: title, home: '', away: '', logoHome: '', logoAway: '', logoComp: '', art: '', country: '', place: '', italian: 0, c1: ACCENT[sport][0], c2: ACCENT[sport][1] }; }
+  function loadSports() {
+    var out = [], notes = [];
+    function src(name, p) { return p.then(function () { notes.push(name + ': ok'); }).catch(function (e) { notes.push(name + ': ' + e.message + ' (se è "Failed to fetch" il sito blocca il browser)'); }); }
+    var jobs = [];
+    var from = Date.now();
+    // football: football-data.org with a key; otherwise (or if the browser blocks it) TheSportsDB's day listing
+    var fb = cfg.football ? src('football-data', Promise.all([league(4332, 'serie a'), league(4480, 'champions')]).then(function (L) {
+      return jget('https://api.football-data.org/v4/matches?competitions=SA,CL&dateFrom=' + day(from - 864e5) + '&dateTo=' + day(from + 3 * 864e5), { 'X-Auth-Token': cfg.football }).then(function (r) {
+        r.matches.forEach(function (m) {
+          var cl = m.competition.code === 'CL'; if (!cl && m.competition.code !== 'SA') return;
+          if (/POSTPONED|CANCELLED|SUSPENDED|FINISHED|AWARDED/.test(m.status)) return;
+          var e = mk(cl ? 1 : 0, ts(m.utcDate), cl ? 'Champions League' : 'Serie A', ''); var info = cl ? L[1] : L[0];
+          e.home = m.homeTeam.shortName || m.homeTeam.name; e.away = m.awayTeam.shortName || m.awayTeam.name; e.logoHome = m.homeTeam.crest; e.logoAway = m.awayTeam.crest;
+          e.logoComp = info.logo || m.competition.emblem; e.art = info.art; e.italian = hasAny(e.home + ' ' + e.away, CLUBS) ? 3 : 0; out.push(e);
+        });
+      });
+    })) : Promise.resolve();
+    jobs.push(fb);
+    jobs.push(src('formula 1', Promise.all([league(4370, 'formula'), jget('https://api.jolpi.ca/ergast/f1/current/next.json')]).then(function (a) {
+      var race = a[1].MRData.RaceTable.Races[0], info = a[0];
+      [['Qualifying', T().quali, 75], ['Sprint', 'Sprint', 60], ['', T().race, 120]].forEach(function (s) {
+        var o = s[0] ? race[s[0]] : race; if (!o) return; var e = mk(3, ts(o.date + 'T' + (o.time || '12:00:00Z')), 'Formula 1', race.raceName + ' · ' + s[1]);
+        e.minutes = s[2]; e.italian = 3; e.logoComp = info.logo; e.art = info.art;
+        var loc = race.Circuit && race.Circuit.Location; if (loc) { e.country = iso(loc.country); e.place = loc.locality || ''; } if (!e.country) e.country = iso(race.raceName); out.push(e);
+      });
+    })));
+    ['Motorsport', 'Tennis', 'Soccer'].forEach(function (sp) {
+      var tennis = sp === 'Tennis', soccer = sp === 'Soccer';
+      jobs.push(src('TheSportsDB ' + sp, (soccer ? league(4481, 'europa') : sp === 'Motorsport' ? league(4407, 'moto') : Promise.resolve({ logo: '', art: '' })).then(function (info) {
+        return Promise.all([0, 1, 2].map(function (d) {
+          return jget('https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=' + day(Date.now() + d * 864e5) + '&s=' + sp).then(function (r) {
+            (r.events || []).forEach(function (j) {
+              var lg = (j.strLeague || '').toLowerCase(), text = (lg + ' ' + (j.strEvent || '') + ' ' + (j.strRound || '')).toLowerCase();
+              var ok = soccer ? (lg.indexOf('europa league') >= 0 && lg.indexOf('conference') < 0 && lg.indexOf('women') < 0)
+                : tennis ? (text.indexOf('final') >= 0 && /atp|wta|grand slam/.test(text)) : lg.indexOf('motogp') >= 0;
+              if (!ok) return;
+              var e = mk(soccer ? 2 : tennis ? 5 : 4, ts(j.strTimestamp), soccer ? 'Europa League' : tennis ? 'Tennis' : 'MotoGP', j.strEvent || '');
+              e.logoComp = info.logo || j.strLeagueBadge || ''; e.art = info.art || j.strThumb || '';
+              if (soccer || tennis) { e.home = j.strHomeTeam; e.away = j.strAwayTeam; e.logoHome = j.strHomeTeamBadge || ''; e.logoAway = j.strAwayTeamBadge || ''; e.italian = (soccer ? hasAny(e.home + ' ' + e.away, CLUBS) : hasAny(e.home + ' ' + e.away, PLAYERS)) ? 3 : 0; }
+              else { e.italian = 3; e.country = iso([j.strCountry, j.strEvent, j.strVenue, j.strCity].join(' ')); e.place = j.strCity || j.strVenue || ''; }
+              if (e.start) out.push(e);
+            });
+          });
+        }));
+      })));
+    });
+    // Serie A / Champions through TheSportsDB when football-data isn't available
+    jobs.push(src('TheSportsDB calcio (Serie A, Champions)', Promise.resolve(fb).then(function () {
+      // Anche con chiave configurata: se football-data non ha restituito partite, usa TheSportsDB.
+      if (out.some(function (e) { return e.sport === 0 || e.sport === 1; })) return;
+      return Promise.all([league(4332, 'serie a'), league(4480, 'champions')]).then(function (L) {
+      return Promise.all([0, 1, 2].map(function (d) {
+        return jget('https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=' + day(Date.now() + d * 864e5) + '&s=Soccer').then(function (r) {
+          (r.events || []).forEach(function (j) {
+            var lg = (j.strLeague || '').toLowerCase(), cl = lg.indexOf('champions league') >= 0 && lg.indexOf('women') < 0, sa = lg.indexOf('italian serie a') >= 0;
+            if (!cl && !sa) return; var info = cl ? L[1] : L[0];
+            var e = mk(cl ? 1 : 0, ts(j.strTimestamp), cl ? 'Champions League' : 'Serie A', j.strEvent || '');
+            e.home = j.strHomeTeam; e.away = j.strAwayTeam; e.logoHome = j.strHomeTeamBadge || ''; e.logoAway = j.strAwayTeamBadge || '';
+            e.logoComp = info.logo || j.strLeagueBadge || ''; e.art = info.art; e.italian = hasAny(e.home + ' ' + e.away, CLUBS) ? 3 : 0; if (e.start) out.push(e);
+          });
+        });
+      }));
+    });
+    })));
+    return Promise.all(jobs).then(function () {
+      out.forEach(function (e) { if (e.sport === 0) e.art = SERIEA; if (e.sport === 1) e.art = '../app/assets/sports/champions.webp'; if (e.sport === 2) e.art = '../app/assets/sports/europa.jpg'; if (e.sport === 3) e.art = '../app/assets/sports/f1.webp'; if (e.sport === 4) e.art = '../app/assets/sports/motogp.webp'; });
+      return { events: out, notes: notes };
+    });
+  }
+  function before(a, b, now) {
+    var al = a.start <= now, bl = b.start <= now; if (al !== bl) return al;
+    if (!al) { var sa = Math.floor(a.start / 18e5), sb = Math.floor(b.start / 18e5); if (sa !== sb) return sa < sb; }
+    if (a.italian !== b.italian) return a.italian > b.italian; if (a.sport !== b.sport) return a.sport < b.sport; return a.start < b.start;
+  }
+  function pickSport() {
+    var now = Date.now(), best = null;
+    data.sports.forEach(function (e) { if (now >= e.start + e.minutes * 6e4 || e.start > now + 30 * 36e5) return; if (!best || before(e, best, now)) best = e; });
+    return best;
+  }
+  function when(e) {
+    var now = Date.now(); if (e.start <= now) return T().live;
+    var d = new Date(e.start), n = new Date(), t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    if (d.toDateString() === n.toDateString()) return T().today + ' ' + t;
+    n.setDate(n.getDate() + 1); if (d.toDateString() === n.toDateString()) return T().tomorrow + ' ' + t;
+    return d.toLocaleDateString(T().loc, { weekday: 'short' }) + ' ' + t;
+  }
+
+  // ---------- cards ----------
+  function el(tag, cls, parent) { var e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; }
+  function grad(c1, c2) { return 'linear-gradient(160deg,' + c1 + ',' + c2 + ')'; }
+  function filmCard(it, rank) {
+    var c = el('div', 'card');
+    var p = el('div', 'layer p', c), w = el('div', 'layer w', c);
+    p.style.backgroundImage = it.poster ? 'url(' + it.poster + ')' : grad(it.c1, it.c2);
+    w.style.backgroundImage = it.backdrop ? 'url(' + it.backdrop + ')' : grad(it.c1, it.c2);
+    el('div', 'scrim', c);
+    if (it.logo && it.posterClean) { var lp = el('img', 'lg p', c); lp.src = it.logo; }
+    else { var tp = el('div', 'ttl p', c); tp.textContent = it.posterClean === undefined || !it.poster ? it.title : ''; }
+    if (it.logo && it.backdropClean) { var lw = el('img', 'lg w', c); lw.src = it.logo; }
+    else { var tw = el('div', 'ttl w', c); tw.textContent = it.title; }
+    if (rank) el('div', 'rank', c).textContent = rank;
+    return c;
+  }
+  function crest(parent, url, name, left) {
+    var d = el('div', 'crest', parent); d.style.left = left + 'px';
+    if (url) { var i = el('img', '', d); i.src = url; i.onerror = function () { i.remove(); d.textContent = (name || '?')[0].toUpperCase(); }; } else d.textContent = (name || '?')[0].toUpperCase();
+    var n = el('div', 'nm', parent); n.style.left = (left + 95 - 220) + 'px'; n.style.textAlign = 'center'; n.textContent = name;
+  }
+  function sportCard(e) {
+    var c = el('div', 'card sport');
+    c.style.background = e.sport === 3 ? '#14141C' : e.sport === 4 ? '#0E0E12' : e.sport === 0 ? 'linear-gradient(180deg,#28519F,#38A8BC)' : 'linear-gradient(135deg,' + e.c2 + ',' + e.c1 + ')';
+    if (e.art) { var a = el('div', 'art', c); a.style.backgroundImage = 'url(' + e.art + ')'; if (e.sport > 4 || e.sport === 1 || e.sport === 2) { var t = el('div', 'tint', c); t.style.background = e.c2; t.style.opacity = .5; } }
+    var comp = el('div', 'comp', c);
+    // File locali opzionali: se presenti mostrano il logo ufficiale anche senza API.
+    var logoFiles = {0: 'seriea.png', 1: 'champions.png', 2: 'europa.png', 3: 'formula1.png', 4: 'motogp.png'};
+    var logoUrls = [];
+    if (logoFiles[e.sport]) logoUrls.push('../app/assets/sports/logos/' + logoFiles[e.sport]);
+    if (e.logoComp) logoUrls.push(e.logoComp);
+    if (logoUrls.length) {
+      var im = el('img', '', comp), logoIndex = 0;
+      im.onerror = function () {
+        logoIndex++;
+        if (logoIndex < logoUrls.length) im.src = logoUrls[logoIndex];
+        else { im.remove(); comp.textContent = e.comp; }
+      };
+      im.src = logoUrls[0];
+    } else comp.textContent = e.comp;
+    if (e.home && e.away) { crest(c, e.logoHome, e.home, 165); crest(c, e.logoAway, e.away, 685); el('div', 'when', c).textContent = when(e); }
+    else {
+      var s = el('div', '', c); s.style.cssText = 'position:absolute;left:44px;right:44px;top:170px;font-size:60px;font-weight:600;text-align:left'; s.textContent = e.title;
+      if (e.sport === 4) { s.style.cssText = "position:absolute;left:44px;right:44px;top:176px;font:400 54px/1.15 MGP, 'Inter', sans-serif;text-align:left;text-transform:uppercase"; }
+      if (e.sport === 3) { s.style.cssText = "position:absolute;left:44px;right:44px;top:176px;font:400 50px/1.15 F1, 'Inter', sans-serif;text-align:left;text-transform:uppercase"; }
+      var w = el('div', '', c); w.style.cssText = 'position:absolute;left:44px;bottom:44px;font-size:36px;font-weight:500'; w.textContent = when(e);
+      var rt = 44;
+      if (e.country) { var fl = el('img', 'flag', c); fl.src = 'https://flagcdn.com/w160/' + e.country + '.png'; fl.style.right = rt + 'px'; if (e.sport === 4) fl.classList.add('motogp'); fl.onerror = function () { var em = el('div', 'place', c); if (e.sport === 4) em.classList.add('motogp'); em.textContent = e.country.toUpperCase().replace(/./g, function (ch) { return String.fromCodePoint(127397 + ch.charCodeAt(0)); }); em.style.right = '44px'; em.style.fontSize = '48px'; fl.remove(); }; }
+    }
+    return c;
+  }
+  function addCap(t, m, left) {
+    var c = el('div', 'cap', cardsEl); c.style.left = left + 'px'; c.textContent = t; if (m) el('small', '', c).textContent = m; return c;
+  }
+  var carCards = [], carTab = -1;
+  function render() {
+    drawTabs();
+    var T0 = T();
+    document.getElementById('quote').textContent = 'Caleppio di Settala · 14° · ' + (cfg.lang === 'it' ? 'Nuvoloso' : 'Cloudy') + '   BTC €96.420 +1,2%';
+    if (tab === 0) {
+      cardsEl.innerHTML = ''; carCards = []; carTab = -1; captionEl.textContent = '';
+      var s = sportIdx >= 0 ? data.sports[sportIdx] : pickSport(), x = 80, films = data.explore;
+      var cards = [];
+      if (s) { var sc = sportCard(s); sc.style.left = '80px'; sc.style.width = '1040px'; cardsEl.appendChild(sc); cards.push(sc);
+        addCap(s.home && s.away ? s.home + ' – ' + s.away : s.title, when(s), 80); }
+      else { var f0 = filmCard(films[0], 0); f0.classList.add('sel'); f0.style.left = '80px'; f0.style.width = '1040px'; cardsEl.appendChild(f0); cards.push(f0); addCap(films[0].title, films[0].meta, 80); }
+      (s ? films : films.slice(1)).slice(0, 2).forEach(function (f, i) { var c = filmCard(f, 0); c.style.left = (1160 + i * 360) + 'px'; c.style.width = '320px'; cardsEl.appendChild(c); cards.push(c); });
+      if (cards[idx]) cards[idx].classList.add('focus');
+      var bgItem = films[0]; bgEl.style.background = 'radial-gradient(circle at 30% 30%,' + (bgItem.c1 || '#888') + ',transparent 70%)';
+      if (bgItem.poster) bgEl.style.background = 'url(' + bgItem.backdrop + ') center/cover';
+    } else {
+      var list = tab === 1 ? data.movies : data.shows;
+      captionEl.textContent = T0.top + (new Intl.DisplayNames([T0.loc], { type: 'region' }).of(cfg.region.toUpperCase()) || cfg.region);
+      if (carTab !== tab || carCards.length !== list.length) {
+        cardsEl.innerHTML = ''; carCards = list.map(function (f, i) { var c = filmCard(f, i + 1); cardsEl.appendChild(c); return c; }); carTab = tab;
+      }
+      var off = idx * 360, xx = 80 - off;
+      carCards.forEach(function (c, i) { var sel = i === idx, w = sel ? 800 : 320; c.className = 'card' + (sel ? ' sel focus' : ''); c.style.left = xx + 'px'; c.style.width = w + 'px'; xx += w + 40; });
+      [].slice.call(cardsEl.querySelectorAll('.cap')).forEach(function (n) { n.remove(); });
+      addCap((idx + 1) + '. ' + list[idx].title, list[idx].meta, 80 + 0);
+      var it = list[idx]; bgEl.style.background = it.backdrop ? 'url(' + it.backdrop + ') center/cover' : 'radial-gradient(circle at 30% 30%,' + it.c1 + ',transparent 70%)';
+    }
+  }
+  function setTab(i) { tab = i; idx = 0; render(); }
+
+  // ---------- loading ----------
+  function load() {
+    logEl.textContent = ''; avatar();
+    if (!cfg.key) { status('Dati di esempio (manca la chiave TMDB)'); loadSportsOnly(); return; }
+    status('Carico TMDB e sport…');
+    Promise.all([top('movie'), top('tv'), taste().then(function (t) { return t.length >= 2 ? t : trending(); }), loadSports()]).then(function (r) {
+      if (r[0].length) data.movies = r[0]; if (r[1].length) data.shows = r[1]; if (r[2].length) data.explore = r[2];
+      applySports(r[3]); status('Dati veri caricati · ' + cfg.region + ' · ' + cfg.lang); render();
+    }).catch(function (e) { status('Errore: ' + e.message); log('Errore: ' + e.message); loadSportsOnly(); });
+  }
+  function loadSportsOnly() { loadSports().then(function (s) { applySports(s); render(); }); }
+  function applySports(s) {
+    s.notes.forEach(function (n) { log(n); });
+    if (s.events.length) { data.sports = s.events.sort(function (a, b) { return a.start - b.start; }); sportIdx = -1; }
+    else log('Nessun evento trovato (restano quelli di esempio)');
+    log('Eventi: ' + s.events.length); var p = pickSport();
+    log('Mostrato: ' + (p ? p.comp + ' · ' + (p.title || p.home + ' – ' + p.away) + ' · ' + when(p) : 'nessuno nelle prossime 30 ore'));
+    s.events.slice(0, 12).forEach(function (e) { log(' · ' + new Date(e.start).toLocaleString() + ' ' + e.comp + ' ' + (e.title || e.home + ' – ' + e.away) + ' [logo comp: ' + (e.logoComp ? 'sì' : 'no') + ', stemmi: ' + (e.logoHome ? 'sì' : 'no') + ']'); });
+  }
+  // fonts picked by hand (the sites don't let a page load them directly): kept in the browser
+  function b64(buf) { var s = '', a = new Uint8Array(buf); for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
+  function useFont(family, buf) {
+    var ff = new FontFace(family, buf); return ff.load().then(function () { document.fonts.add(ff); render(); }).catch(function (e) { log('font ' + family + ': ' + e.message); });
+  }
+  [['F1', 'f-font-f1'], ['MGP', 'f-font-mgp']].forEach(function (f) {
+    var saved = null; try { saved = localStorage.getItem('fmtv-font-' + f[0]); } catch (e) {}
+    if (saved) { var bin = atob(saved), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); useFont(f[0], u.buffer); }
+    document.getElementById(f[1]).onchange = function () {
+      var file = this.files[0]; if (!file) return;
+      file.arrayBuffer().then(function (buf) { try { localStorage.setItem('fmtv-font-' + f[0], b64(buf)); } catch (e) { log('font troppo grande per essere salvato'); } return useFont(f[0], buf); });
+    };
+  });
+  function probe(label, url) {
+    return new Promise(function (res) {
+      var i = new Image(), t = setTimeout(function () { res(label + ': nessuna risposta in 8 s'); }, 8000);
+      i.onload = function () { clearTimeout(t); res(label + ': ok ' + i.naturalWidth + 'x' + i.naturalHeight); };
+      i.onerror = function () { clearTimeout(t); res(label + ': ERRORE (' + url + ')'); };
+      i.src = url;
+    });
+  }
+  document.getElementById('f-test').onclick = function () {
+    var ev = data.sports.filter(function (e) { return !e.sample && e.logoHome; })[0] || data.sports.filter(function (e) { return !e.sample; })[0];
+    if (!ev) { log('Nessun evento vero: premi prima "Carica dati"'); return; }
+    log('--- Test loghi su: ' + ev.comp + ' ' + (ev.title || ev.home + ' – ' + ev.away));
+    var tests = [];
+    [['logo competizione', ev.logoComp], ['stemma casa', ev.logoHome], ['stemma ospite', ev.logoAway]].forEach(function (p) {
+      if (!p[1]) { tests.push(Promise.resolve(p[0] + ': la fonte non ha dato nessun indirizzo')); return; }
+      tests.push(probe(p[0] + ' (diretto)', p[1]));
+      if (/\.svg$/i.test(p[1])) {
+        ['https://wsrv.nl/', 'https://images.weserv.nl/'].forEach(function (h) { tests.push(probe(p[0] + ' via ' + h.split('/')[2], h + '?w=256&h=256&fit=inside&output=png&url=' + encodeURIComponent(p[1]))); });
+      }
+    });
+    tests.push(probe('bandiera (flagcdn)', 'https://flagcdn.com/w160/it.png'));
+    Promise.all(tests).then(function (l) { l.forEach(log); });
+  };
+  document.getElementById('f-go').onclick = function () {
+    Object.keys(ids).forEach(function (k) { cfg[k] = document.getElementById(ids[k]).value.trim(); });
+    cfg.region = (cfg.region || 'IT').toUpperCase();
+    try { localStorage.setItem('fmtv', JSON.stringify(cfg)); } catch (e) {}
+    load();
+  };
+
+  // ---------- the Sport button: every event of one day, by competition ----------
+  var LEAGUES = [['italian serie a', 0], ['uefa champions league', 1], ['uefa europa league', 2], ['english premier league', 6], ['spanish la liga', 7], ['german bundesliga', 8], ['french ligue 1', 9]];
+  var NAMES2 = ['Serie A', 'Champions League', 'Europa League', 'Formula 1', 'MotoGP', 'Tennis', 'Premier League', 'LaLiga', 'Bundesliga', 'Ligue 1'];
+  var ORDER = [0, 1, 2, 6, 7, 8, 9, 3, 4, 5];
+  var COLORS = { 0: '#38A8BC', 1: '#4A6CF7', 2: '#E8650A', 6: '#A64CC8', 7: '#EE8707', 8: '#D3010C', 9: '#2F6BFF', 3: '#E10600', 4: '#E8590C', 5: '#2E8B57' };
+  var agendaOffset = 0, agendaCache = {};
+  function dayStart(off) { var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + off); return d.getTime(); }
+  function ae(sp, start, title) { var e = mk(sp, start, NAMES2[sp], title || ''); return e; }
+  function fetchAgenda(off) {
+    var start = dayStart(off), end = dayStart(off + 1), raw = [], notes = [], jobs = [];
+    function src(n, p) { return p.catch(function (e) { notes.push(n + ': ' + e.message); }); }
+    var haveFootball = false;
+    if (cfg.football) jobs.push(src('football-data', jget('https://api.football-data.org/v4/matches?competitions=SA,CL,PL,PD,BL1,FL1&dateFrom=' + day(start - 864e5) + '&dateTo=' + day(end + 864e5), { 'X-Auth-Token': cfg.football }).then(function (r) {
+      haveFootball = true;
+      r.matches.forEach(function (m) {
+        var sp = { SA: 0, CL: 1, PL: 6, PD: 7, BL1: 8, FL1: 9 }[m.competition.code]; if (sp === undefined || /POSTPONED|CANCELLED/.test(m.status)) return;
+        var e = ae(sp, ts(m.utcDate)); e.home = m.homeTeam.shortName || m.homeTeam.name; e.away = m.awayTeam.shortName || m.awayTeam.name; e.logoHome = m.homeTeam.crest; e.logoAway = m.awayTeam.crest; e.logoComp = m.competition.emblem;
+        e.italian = hasAny(e.home + ' ' + e.away, CLUBS) ? 3 : 0; raw.push(e);
+      });
+    })));
+    jobs.push(src('formula 1', jget('https://api.jolpi.ca/ergast/f1/current.json').then(function (r) {
+      r.MRData.RaceTable.Races.forEach(function (race) {
+        var loc = race.Circuit && race.Circuit.Location;
+        [['FirstPractice', 'Prove libere 1'], ['SecondPractice', 'Prove libere 2'], ['ThirdPractice', 'Prove libere 3'], ['SprintQualifying', 'Qualifiche sprint'], ['Sprint', 'Sprint'], ['Qualifying', T().quali], ['', T().race]].forEach(function (s) {
+          var o = s[0] ? race[s[0]] : race; if (!o) return; var e = ae(3, ts(o.date + 'T' + (o.time || '12:00:00Z')), race.raceName + ' · ' + s[1]); e.italian = 3;
+          if (loc) { e.country = iso(loc.country); e.place = loc.locality || ''; } raw.push(e);
+        });
+      });
+    })));
+    ['Soccer', 'Motorsport', 'Tennis'].forEach(function (sp) { [start, end].forEach(function (d) {
+      jobs.push(src('TheSportsDB ' + sp, jget('https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=' + day(d) + '&s=' + sp).then(function (r) {
+        var tn = 0; (r.events || []).forEach(function (j) {
+          var lg = (j.strLeague || '').toLowerCase(), kind = -1, at = ts(j.strTimestamp); if (!at) return;
+          if (sp === 'Soccer') { LEAGUES.forEach(function (l) { if (lg.indexOf(l[0]) >= 0 && lg.indexOf('women') < 0 && lg.indexOf('conference') < 0) kind = l[1]; }); if (kind >= 0 && haveFootball && kind !== 2) return; }
+          else if (sp === 'Motorsport') { if (lg.indexOf('motogp') >= 0 && !/moto2|moto3/.test(lg)) kind = 4; }
+          else if (/atp|wta|grand slam/.test(lg) && tn < 14) { kind = 5; tn++; }
+          if (kind < 0) return;
+          var e = ae(kind, at, j.strEvent || ''); e.logoComp = j.strLeagueBadge || '';
+          if (kind !== 4) { e.home = j.strHomeTeam || ''; e.away = j.strAwayTeam || ''; e.logoHome = j.strHomeTeamBadge || ''; e.logoAway = j.strAwayTeamBadge || ''; if (!e.home || !e.away) { e.home = ''; e.away = ''; } }
+          else { e.country = iso([j.strCountry, j.strEvent, j.strVenue, j.strCity].join(' ')); e.place = j.strCity || j.strVenue || ''; }
+          e.italian = kind === 4 ? 3 : kind === 5 ? (hasAny(e.home + ' ' + e.away, PLAYERS) ? 3 : 0) : (hasAny(e.home + ' ' + e.away, CLUBS) ? 3 : 0); raw.push(e);
+        });
+      })));
+    }); });
+    return Promise.all(jobs).then(function () {
+      var seen = {}, out = raw.filter(function (e) { if (e.start < start || e.start >= end) return false; var k = e.sport + e.title + e.home + e.away + e.start; if (seen[k]) return false; return (seen[k] = true); });
+      out.sort(function (a, b) { return a.start - b.start || b.italian - a.italian; });
+      return { events: out, notes: notes };
+    });
+  }
+  function sampleAgenda() {
+    var base = dayStart(agendaOffset), h = function (x) { return base + x * 36e5; }, out = [];
+    [[0, 18.75, 'Milan', 'Napoli'], [0, 20.75, 'Inter', 'Juventus'], [1, 21, 'Real Madrid', 'Napoli'], [6, 17.5, 'Arsenal', 'Chelsea'], [6, 20, 'Liverpool', 'Man City'],
+     [7, 21, 'Barcelona', 'Sevilla'], [8, 15.5, 'Bayern', 'Dortmund'], [9, 21, 'PSG', 'Marseille']].forEach(function (a) { var e = ae(a[0], h(a[1])); e.home = a[2]; e.away = a[3]; e.italian = hasAny(a[2] + a[3], CLUBS) ? 3 : 0; out.push(e); });
+    var f = ae(3, h(14), "Gran Premio d'Italia · Gara"); f.place = 'Monza'; out.push(f); var m = ae(4, h(13), "Gran Premio d'Italia · Gara"); m.place = 'Mugello'; out.push(m);
+    var t = ae(5, h(15)); t.home = 'Jannik Sinner'; t.away = 'Carlos Alcaraz'; out.push(t);
+    return out.sort(function (a, b) { return a.start - b.start; });
+  }
+  function openAgenda() { document.getElementById('agenda').style.display = 'block'; drawAgenda(); }
+  function closeAgenda() { document.getElementById('agenda').style.display = 'none'; }
+  function drawAgenda() {
+    var g = document.getElementById('agenda'), off = agendaOffset; g.innerHTML = '';
+    el('h2', '', g).textContent = cfg.lang === 'it' ? 'Sport' : 'Sports';
+    var dl = el('div', 'day', g), d = new Date(dayStart(off));
+    dl.textContent = '‹  ' + (off === 0 ? T().today + ' · ' : off === 1 ? T().tomorrow + ' · ' : '') + d.toLocaleDateString(T().loc, { weekday: 'long', day: 'numeric', month: 'long' }) + '  ›';
+    var list = el('div', 'list', g); el('div', 'help', g).textContent = '← → cambia giorno · Esc chiude · clic su un evento (qui solo anteprima)';
+    var hit = agendaCache[off];
+    function paint(res, sample) {
+      list.innerHTML = '';
+      if (!res.events.length) { el('div', 'msg', list).textContent = 'Nessun evento in questo giorno.'; return; }
+      if (sample) el('div', 'msg', list).textContent = 'Nessun dato vero trovato per questo giorno: ecco un esempio.';
+      ORDER.forEach(function (sp) {
+        var evs = res.events.filter(function (e) { return e.sport === sp; }); if (!evs.length) return;
+        var hd = el('div', 'hd', list); var bar = el('i', '', hd); bar.style.background = COLORS[sp]; hd.appendChild(document.createTextNode(NAMES2[sp]));
+        evs.forEach(function (e) {
+          var row = el('div', 'ev', list), tm = new Date(e.start); el('div', 't', row).textContent = ('0' + tm.getHours()).slice(-2) + ':' + ('0' + tm.getMinutes()).slice(-2);
+          function side(parent, logo, nm) { var s = el('div', 's', parent); if (logo) { var im = el('img', '', s); im.src = logo; im.onerror = function () { im.remove(); }; } s.appendChild(document.createTextNode(nm)); }
+          if (e.home && e.away) { side(row, e.logoHome, e.home); el('div', 'v', row).textContent = '–'; side(row, e.logoAway, e.away); }
+          else { var s = el('div', 's', row); s.textContent = e.title + (e.place ? '  ·  ' + e.place : ''); }
+        });
+      });
+    }
+    if (hit) return paint(hit, hit.sample);
+    el('div', 'msg', list).textContent = 'Carico gli eventi…';
+    fetchAgenda(off).then(function (res) {
+      if (!res.events.length) { res = { events: sampleAgenda(), notes: res.notes, sample: true }; }
+      agendaCache[off] = res; res.notes.forEach(function (n) { log('agenda: ' + n); });
+      if (document.getElementById('agenda').style.display === 'block' && agendaOffset === off) paint(res, res.sample);
+    });
+  }
+
+  // ---------- gallery: every sport at once, with real data where it was found, a sample otherwise ----------
+  var NAMES = ['Serie A', 'Champions League', 'Europa League', 'Formula 1', 'MotoGP', 'Tennis'];
+  var SAMPLE = [
+    { home: 'Milan', away: 'Napoli', comp: 'Serie A' }, { home: 'Inter', away: 'Barcellona', comp: 'Champions League' },
+    { home: 'Roma', away: 'Ajax', comp: 'Europa League' }, { title: "Gran Premio d'Italia · Gara", comp: 'Formula 1' },
+    { title: "Gran Premio d'Italia · Gara", comp: 'MotoGP' }, { home: 'Jannik Sinner', away: 'Carlos Alcaraz', comp: 'Tennis' }];
+  function galleryEvent(sp) {
+    var real = data.sports.filter(function (e) { return e.sport === sp; })[0];
+    if (real) return { e: real, real: !real.sample };
+    var s = SAMPLE[sp], e = mk(sp, Date.now() + (3 + sp) * 36e5, s.comp, s.title || '');
+    if (s.home) { e.home = s.home; e.away = s.away; }
+    e.art = sp === 1 ? '../app/assets/sports/champions.webp' : sp === 2 ? '../app/assets/sports/europa.jpg' : sp === 3 ? '../app/assets/sports/f1.webp' : '';
+    return { e: e, real: false };
+  }
+  function openGallery() {
+    var g = document.getElementById('gallery'); g.innerHTML = ''; g.style.display = 'block';
+    el('h2', '', g).textContent = 'Tutti gli sport';
+    el('div', 'hint', g).textContent = 'Clic su una card per vederla in Esplora · G o Esc per chiudere';
+    for (var sp = 0; sp < 6; sp++) (function (sp) {
+      var it = galleryEvent(sp), cell = el('div', 'cell', g);
+      cell.style.left = (80 + (sp % 3) * 600) + 'px'; cell.style.top = (150 + Math.floor(sp / 3) * 400) + 'px';
+      cell.appendChild(sportCard(it.e));
+      var lab = el('div', 'lab', g); lab.style.left = (80 + (sp % 3) * 600) + 'px'; lab.style.top = (150 + Math.floor(sp / 3) * 400 + 252) + 'px';
+      lab.textContent = NAMES[sp] + (it.real ? ' · dati veri' : ' · esempio');
+      cell.onclick = function () { var at = data.sports.indexOf(it.e); if (at < 0) { data.sports.push(it.e); at = data.sports.length - 1; } sportIdx = at; tab = 0; idx = 0; closeGallery(); render(); };
+    })(sp);
+  }
+  function closeGallery() { document.getElementById('gallery').style.display = 'none'; }
+  document.getElementById('gal').onclick = openGallery;
+
+  addEventListener('keydown', function (e) {
+    if (e.key === 'g' || e.key === 'G') { var gg = document.getElementById('gallery'); return gg.style.display === 'block' ? closeGallery() : openGallery(); }
+    var ag = document.getElementById('agenda').style.display === 'block';
+    if (ag && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { agendaOffset += e.key === 'ArrowRight' ? 1 : -1; return drawAgenda(); }
+    if (e.key === 'Escape') { closeAgenda(); return closeGallery(); }
+    if (/INPUT|SELECT/.test((e.target || {}).tagName || '')) return;
+    var max = tab === 0 ? 2 : 9;
+    if (e.key === 'ArrowRight') idx = Math.min(max, idx + 1);
+    else if (e.key === 'ArrowLeft') idx = Math.max(0, idx - 1);
+    else if (e.key === '1' || e.key === '2' || e.key === '3') return setTab(+e.key - 1);
+    else if (e.key === 's' || e.key === 'S') { sportIdx = (sportIdx + 1) % data.sports.length; if (tab !== 0) { tab = 0; idx = 0; } }
+    else if (e.key === 'n' || e.key === 'N') { night = !night; stage.className = night ? 'night' : ''; return; }
+    else if (e.key === 'd' || e.key === 'D') { document.getElementById('panel').style.display = 'block'; return; }
+    else return;
+    render();
+  });
+  avatar(); render();
+  if (cfg.key) load();
+})();
+</script>
+</body>
+</html>

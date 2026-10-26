@@ -9,7 +9,7 @@
 Trending picks from your own apps, the weather at a glance, and a look that follows the sunset.<br>
 Open source. Built with Claude Code. One button to undo.
 
-[**freemytv.io**](https://freemytv.io) · [Install](#install) · [LG TVs](#lg-tvs-webos) · [Samsung TVs](#samsung-tvs-tizen) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
+[**freemytv.io**](https://freemytv.io) · [Guida rapida (Mac e Windows)](#guida-rapida-installare-su-google-tv-mac-e-windows) · [Install](#install) · [LG TVs](#lg-tvs-webos) · [Samsung TVs](#samsung-tvs-tizen) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
 
 <img src=".github/preview.webp" width="880" alt="The Free My TV home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
 
@@ -26,6 +26,108 @@ Open source. Built with Claude Code. One button to undo.
 - **Fast.** 60 fps, every frame in 16.6 ms, on the TV's own chip. The home screen uses 96 MB of memory instead of 242 MB (−60%).<br><sub>Measured on a 98″ TCL Google TV running Android 14.</sub>
 - **Set up on the TV.** Language, temperature, theme, the weather and prices cards, which coins, and the apps on the shelf, in Free My TV's own settings.
 - **Safe.** No root. Nothing is uninstalled. One button brings back the factory home screen.
+
+## Guida rapida: installare su Google TV (Mac e Windows)
+
+Circa 15 minuti. Serve una Google TV o Android TV, un computer sulla **stessa rete Wi-Fi** e un account gratuito su [themoviedb.org](https://www.themoviedb.org/signup) (per i film consigliati). I comandi si copiano e si incollano uno alla volta nel Terminale (Mac) o in Ubuntu (Windows).
+
+### 1. Sulla TV (uguale per tutti)
+
+1. **Impostazioni → Sistema → Informazioni**: premi 7 volte su *Build di Android TV OS* finché compare "Sei uno sviluppatore".
+2. **Impostazioni → Sistema → Opzioni sviluppatore**: attiva **Debug USB** (o *Debug wireless*).
+3. **Impostazioni → Rete e Internet**: scrivi l'**indirizzo IP** della TV (per esempio `192.168.1.50`).
+
+### 2. Sul computer: prepara gli strumenti (una volta sola)
+
+**Mac**
+
+1. Apri **Terminale** e installa [Homebrew](https://brew.sh) se non l'hai (segui la riga che trovi sul sito).
+2. Installa gli strumenti:
+   ```bash
+   brew install git
+   brew install --cask temurin android-commandlinetools android-platform-tools
+   sdkmanager "build-tools;34.0.0" "platforms;android-34"
+   ```
+   Se `sdkmanager` chiede di accettare le licenze, scrivi `y` ogni volta.
+
+**Windows** (si usa Ubuntu dentro Windows, si chiama WSL)
+
+1. Apri **PowerShell come amministratore** e scrivi `wsl --install`. Riavvia il PC, poi apri **Ubuntu** dal menu Start e crea nome utente e password.
+2. In Ubuntu, installa gli strumenti:
+   ```bash
+   sudo apt update && sudo apt install -y git zip unzip curl python3 openjdk-17-jdk-headless adb
+   ```
+3. Installa gli strumenti Android (copia tutto il blocco in una volta):
+   ```bash
+   mkdir -p ~/Android/Sdk/cmdline-tools && cd ~/Android/Sdk/cmdline-tools
+   curl -LO https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+   unzip -q commandlinetools-linux-*_latest.zip && mv cmdline-tools latest && cd ~
+   echo 'export ANDROID_HOME=$HOME/Android/Sdk' >> ~/.bashrc && source ~/.bashrc
+   yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34"
+   ```
+   Se il download non parte, prendi il link "Command line tools only" per Linux da [developer.android.com/studio](https://developer.android.com/studio#command-line-tools-only) e usa quello.
+
+### 3. Scarica il progetto e scrivi le tue impostazioni
+
+```bash
+git clone -b claude/gifted-gates-38cgcp https://github.com/blvckroby/free-my-tv
+cd free-my-tv
+./build.sh
+```
+
+La prima volta `./build.sh` crea il file `config.properties` e si ferma. Aprilo e scrivi i tuoi dati (Mac: `open -e config.properties`; Windows/Ubuntu: `nano config.properties`, poi `Ctrl+O`, Invio, `Ctrl+X`):
+
+| Riga | Cosa metterci |
+|---|---|
+| `tmdb_key=` | La tua chiave gratuita di TMDB (vedi [The TMDB key](#the-tmdb-key)). Scrivila solo qui nel file, non condividerla. |
+| `city=`, `latitude=`, `longitude=` | La tua città e le sue coordinate (già impostate su Caleppio di Settala). |
+| `tmdb_region=`, `language=` | `IT` e `it` per Italia e italiano (già impostati). |
+| `football_key=` | Facoltativa: chiave gratuita di [football-data.org](https://www.football-data.org/client/register), per Serie A, Champions e campionati nella pagina Sport. |
+
+### 4. Costruisci e installa
+
+```bash
+./build.sh
+```
+Deve finire con **Built FreeMyTV.apk**. Poi, con l'IP della tua TV:
+```bash
+adb connect 192.168.1.50:5555
+adb install -r FreeMyTV.apk
+```
+**Sulla TV** compare "Consentire il debug USB?": spunta *Consenti sempre* e conferma. Se il comando `adb connect` dice "failed", controlla che TV e computer siano sulla stessa Wi-Fi e che il debug sia attivo.
+
+Solo se la TV è **TCL**, scrivi anche:
+```bash
+adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"
+```
+
+### 5. Attivala dalla TV
+
+Sulla TV apri l'app **Free My TV** → **Home Screen** → **Free My TV** e accetta ancora la richiesta di debug (*Consenti sempre*). Il cambio si fa dalla TV, non dal computer. Se all'inizio il tasto Home ti porta su "HDMI 1", la Home di Free My TV non è ancora attiva: ripeti questo passaggio.
+
+### Aggiornare in futuro
+
+```bash
+cd free-my-tv
+git pull origin claude/gifted-gates-38cgcp
+./build.sh
+adb connect 192.168.1.50:5555
+adb install -r FreeMyTV.apk
+```
+Tieni il file `freemytv.keystore`: gli aggiornamenti vanno firmati con la stessa chiave.
+
+### Per tornare indietro
+
+Sulla TV: **Free My TV → Home Screen → Original**. Torna tutto come prima.
+
+### Extra facoltativi
+
+- **I tuoi gusti in Esplora:** `python3 tools/tmdb_login.py` (si apre TMDB, premi *Approva*, incolla la riga che stampa in `config.properties`).
+- **Font di F1 e MotoGP:** `pip3 install fonttools brotli`, poi `python3 tools/sport_assets.py`, poi `./build.sh`. I file restano solo sul tuo computer.
+- **Foto del profilo:** `profile_photo=` con un link a una tua immagine.
+- **App per gli sport:** `sports_apps=` con i pacchetti delle app (per trovarli: `adb shell pm list packages | grep -i sky`).
+- **Provare senza TV:** apri `preview/home.html` nel browser.
+- **Se qualcosa non va:** `adb logcat -d -s FreeMyTV` mostra cosa ha fatto l'app.
 
 ## Install
 

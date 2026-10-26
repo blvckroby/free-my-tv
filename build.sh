@@ -39,6 +39,7 @@ number() {
 LAT="$(number latitude 40.7128)"
 LON="$(number longitude -74.0060)"
 ASSIST=false; [ "$(prop disable_assistant false)" = "true" ] && ASSIST=true
+SPORTS=true; [ "$(prop sports true)" = "false" ] && SPORTS=false
 CRYPTO=false; [ "$(prop show_crypto true)" = "true" ] && CRYPTO=true
 
 rm -rf out && mkdir -p out/gen/io/freemytv out/classes
@@ -51,6 +52,12 @@ final class Config {
 
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String TMDB_SESSION = "$(prop tmdb_session '')";
+    static final String FOOTBALL_KEY = "$(prop football_key '')";
+    static final String CHAMPIONS_ART = "$(prop champions_art '')";
+    static final String SERIEA_ART = "$(prop seriea_art '')";
+    static final String EUROPA_ART = "$(prop europa_art '')";
+    static final String SPORTS_APPS = "$(prop sports_apps com.dazn,com.amazon.amazonvideo.livingroom)";
+    static final boolean SPORTS = $SPORTS;
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
