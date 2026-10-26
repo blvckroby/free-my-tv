@@ -23,8 +23,8 @@ import android.graphics.Shader;
  */
 final class Backdrop {
     static final int W = 1920, H = 1080, FW = 192, FH = 108, GW = 480, GH = 270;
-    /** The cards at their focused size (1.05×): the wide one and the two tall ones. */
-    static final int WIDE_W = 1092, WIDE_H = 464, TALL_W = 336, TALL_H = 464, FEATURE_W = 840, FEATURE_H = 464;
+    /** The cards: the home screen's row has posters of 171 × 256 and the opened cover 455 × 256 (5% more when focused). */
+    static final int WIDE_W = 1092, WIDE_H = 464, TALL_W = 240, TALL_H = 356, FEATURE_W = 720, FEATURE_H = 405;
     final Bitmap image;
     final int[] frost;      // heavily blurred (frosted glass, bottom drawer)
     final int[] glass;      // lightly blurred (Liquid Glass: the photo shows through the glass)

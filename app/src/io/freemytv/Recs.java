@@ -121,7 +121,8 @@ final class Recs {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    private final Map<String, Backdrop> images = new LinkedHashMap<>();   // this hour's, built and ready to draw
+    // This hour's, built and ready to draw; in order of use, so the oldest unused one goes first (never one on screen).
+    private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile List<Pick> topMovies = new ArrayList<>(), topShows = new ArrayList<>();
@@ -418,14 +419,9 @@ final class Recs {
         return out;
     }
 
-    /** This hour's picks for the three tabs (Explore, Movies, Shows), without repeats. */
+    /** This hour's picks for the home screen's For You row (Movies and Shows are the Top 10 lists). */
     List<Pick> wanted() {
-        List<Pick> out = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        for (String kind : new String[] {null, "movie", "tv"}) {
-            for (Pick p : kind == null ? forYou(FOR_YOU) : now(kind)) if (seen.add(key(p))) out.add(p);
-        }
-        return out;
+        return forYou(FOR_YOU);
     }
 
     /** Movies and shows are numbered separately on TMDB: a pick is identified by type + number. */
@@ -899,7 +895,7 @@ final class Recs {
             if (forLight != light) return;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(imageKey(p), backdrop);
-                while (images.size() > (forLight ? 30 : 4)) images.remove(images.keySet().iterator().next());
+                while (images.size() > (forLight ? 36 : 4)) images.remove(images.keySet().iterator().next());
             }
             notifyListeners();
         } catch (IOException | RuntimeException | OutOfMemoryError e) {
