@@ -583,15 +583,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lSportName = Ui.text(Ui.semibold, 27 * k, 0xFFFFFFFF);
         lSportName.setTextAlign(Paint.Align.CENTER);
         // The scoreboard (matchday): the kick-off time or the minute, big; the lines above and below it.
-        lBoard = Ui.numbers(Ui.displaySemibold, 96 * k, 0xFFFFFFFF);
+        lBoard = Ui.numbers(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
         lBoard.setLetterSpacing(-0.035f);
         lBoard.setTextAlign(Paint.Align.CENTER);
-        lBoardWord = Ui.text(Ui.displaySemibold, 60 * k, 0xFFFFFFFF);
+        lBoardWord = Ui.text(Ui.displaySemibold, 54 * k, 0xFFFFFFFF);
         lBoardWord.setLetterSpacing(-0.02f);
         lBoardWord.setTextAlign(Paint.Align.CENTER);
         lBoardLine = Ui.text(Ui.medium, 24 * k, 0xD9FFFFFF);
         lBoardLine.setTextAlign(Paint.Align.CENTER);
-        lBoardRight = Ui.numbers(Ui.displaySemibold, 96 * k, 0xFFFFFFFF);
+        lBoardRight = Ui.numbers(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
         lBoardRight.setLetterSpacing(-0.035f);
         lBoardRight.setTextAlign(Paint.Align.RIGHT);
         lBoardLineRight = Ui.text(Ui.medium, 24 * k, 0xD9FFFFFF);
@@ -2656,9 +2656,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float pad = 44 * k, mx = area.centerX(), my = area.centerY();
         // The competition at the top center, in its own colors (the person's logo or the one found online).
         Bitmap comp = sports.bitmap(p.logoComp, null);
-        float logoY = area.top + 24 * k + 22 * k;
+        float logoY = area.top + 22 * k + 30 * k;
         if (comp != null) {
-            drawLogo(c, comp, mx, logoY, 220 * k, 44 * k, false);
+            drawLogo(c, comp, mx, logoY, 280 * k, 60 * k, false);
         } else {
             lSportLabel.setTextAlign(Paint.Align.CENTER);
             c.drawText(p.label, mx, logoY + Ui.halfCap(lSportLabel), lSportLabel);
@@ -2678,18 +2678,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (!p.home.isEmpty() && !p.away.isEmpty()) {
             // Crests with the names under them, and the time between: one block, centered in the card's height.
-            float size = 140 * k, cy = my - 16 * k;
+            float size = 140 * k, cy = my + 4 * k;
             float leftX = area.left + 220 * k, rightX = area.right - 220 * k;
             drawSide(c, sports.bitmap(p.logoHome, p.home), p.home, leftX, cy, size);
             drawSide(c, sports.bitmap(p.logoAway, p.away), p.away, rightX, cy, size);
             TextPaint np = new TextPaint(lSportTeam);
-            float maxName = 330 * k, nameBase = cy + size / 2 + 44 * k;
+            float maxName = 330 * k, nameBase = cy + size / 2 + 40 * k;
             c.drawText(TextUtils.ellipsize(p.home, np, maxName, TextUtils.TruncateAt.END).toString(), leftX, nameBase, lSportTeam);
             c.drawText(TextUtils.ellipsize(p.away, np, maxName, TextUtils.TruncateAt.END).toString(), rightX, nameBase, lSportTeam);
             boolean word = !p.board.isEmpty() && !Character.isDigit(p.board.charAt(0));
-            c.drawText(p.boardTop, mx, cy - 52 * k, lBoardLine);
-            c.drawText(p.board, mx, cy + (word ? 22 : 34) * k, word ? lBoardWord : lBoard);
-            if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, mx, cy + 78 * k, lBoardLine);
+            c.drawText(p.boardTop, mx, cy - 46 * k, lBoardLine);
+            c.drawText(p.board, mx, cy + (word ? 18 : 30) * k, word ? lBoardWord : lBoard);
+            if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, mx, cy + 70 * k, lBoardLine);
             return;
         }
         // A race (or an event without two sides): the name on up to two lines, then the session and place.
@@ -2712,8 +2712,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             sx += 62 * k;
         }
         if (!p.raceLine.isEmpty()) c.drawText(p.raceLine, sx, sy, lSportWhen);
-        c.drawText(p.board, area.right - pad, my + 22 * k, lBoardRight);
-        if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, area.right - pad, my + 62 * k, lBoardLineRight);
+        c.drawText(p.board, area.right - pad, my + 20 * k, lBoardRight);
+        if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, area.right - pad, my + 56 * k, lBoardLineRight);
     }
 
     /** Splits a race's name into at most two lines that fit `width` (the second is shortened if needed); kept until it changes. */

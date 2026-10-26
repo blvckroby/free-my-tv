@@ -66,7 +66,7 @@ final class Sports {
     /** A source failed on the last look (no internet, a refusal): look again sooner. */
     private volatile boolean partial;
     /** Bump when the sources or how they are read change (the saved events are dropped and fetched again). */
-    private static final int SOURCES_VERSION = 2;
+    private static final int SOURCES_VERSION = 3;
 
     private Sports(Context c) {
         context = c;
@@ -218,8 +218,107 @@ final class Sports {
         p.detailed = true;
         p.meta = when(best.start, now) + (app.isEmpty() ? "" : " · " + app);
         board(p, best, now);
+        // The person's own crests apply at once, also to events saved before they were added.
+        p.logoHome = localCrestOr(best.home, p.logoHome);
+        p.logoAway = localCrestOr(best.away, p.logoAway);
         p.id = (p.title + p.meta + p.board + p.boardSub).hashCode();
         return p;
+    }
+
+    // MARK: - Team crests
+
+    /** Serie A badges from TheSportsDB by team name (kept a week): kept up to date there, not always on football-data. */
+    private final java.util.Map<String, String> italianBadges = new java.util.HashMap<>();
+    private java.util.Set<String> crestAssets;
+
+    /** Loads the Serie A badges (from the week's saved copy, or once from TheSportsDB). Background thread only. */
+    private void loadItalianBadges() {
+        long now = System.currentTimeMillis();
+        String saved = cache.getString("badgesSA", "");
+        if (saved.isEmpty() || now - cache.getLong("badgesSAAt", 0) > WEEK) {
+            try {
+                JSONArray teams = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/" + SPORTSDB_KEY
+                        + "/search_all_teams.php?l=Italian%20Serie%20A", null)).optJSONArray("teams");
+                JSONObject map = new JSONObject();
+                for (int i = 0; teams != null && i < teams.length(); i++) {
+                    JSONObject t = teams.getJSONObject(i);
+                    String badge = clean(t.optString("strBadge"));
+                    if (badge.isEmpty()) continue;
+                    List<String> names = new ArrayList<>();
+                    names.add(t.optString("strTeam"));
+                    names.add(t.optString("strTeamShort"));
+                    java.util.Collections.addAll(names, t.optString("strTeamAlternate").split(","));
+                    for (String n : names) if (!norm(n).isEmpty()) map.put(norm(n), badge);
+                }
+                if (map.length() > 0) {
+                    saved = map.toString();
+                    cache.edit().putString("badgesSA", saved).putLong("badgesSAAt", now).apply();
+                }
+            } catch (Exception e) {
+                AppLog.w("Serie A badges: " + e.getMessage());
+            }
+        }
+        if (saved.isEmpty()) return;
+        try {
+            JSONObject map = new JSONObject(saved);
+            synchronized (italianBadges) {
+                italianBadges.clear();
+                for (java.util.Iterator<String> it = map.keys(); it.hasNext(); ) {
+                    String key = it.next();
+                    italianBadges.put(key, map.getString(key));
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** The team's crest: the person's own file, else the up-to-date Serie A badge, else `fallback` (football-data's). */
+    private String crestFor(String team, String fallback) {
+        String own = localCrest(team);
+        if (!own.isEmpty()) return own;
+        String key = norm(team);
+        if (key.isEmpty()) return fallback;
+        synchronized (italianBadges) {
+            String exact = italianBadges.get(key);
+            if (exact != null) return exact;
+            // "Inter" → "inter milan", "Verona" → "hellas verona": the name as a whole word of a longer one.
+            for (java.util.Map.Entry<String, String> en : italianBadges.entrySet()) {
+                if ((" " + en.getKey() + " ").contains(" " + key + " ")) return en.getValue();
+            }
+        }
+        return fallback;
+    }
+
+    private String localCrestOr(String team, String otherwise) {
+        String own = localCrest(team);
+        return own.isEmpty() ? otherwise : own;
+    }
+
+    /** app/assets/sports/crests/<name>.png (or .webp), the name in lowercase without spaces: venezia.png, hellasverona.png. */
+    private String localCrest(String team) {
+        if (crestAssets == null) crestAssets = list("sports/crests");
+        if (crestAssets.isEmpty()) return "";
+        String slug = norm(team).replace(" ", "");
+        for (String ext : new String[] {"png", "webp"}) {
+            if (crestAssets.contains(slug + "." + ext)) return "asset:sports/crests/" + slug + "." + ext;
+        }
+        return "";
+    }
+
+    private static final java.util.Set<String> CLUB_WORDS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "fc", "ac", "as", "ss", "ssc", "us", "acf", "cfc", "afc", "bc", "sc", "ssd", "spa", "calcio", "club"));
+
+    /** A team's name for matching: lowercase, no accents or punctuation, without "FC", "AC", "Calcio", years. */
+    private static String norm(String name) {
+        if (name == null) return "";
+        String n = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        n = n.toLowerCase(Locale.ROOT).replaceAll("[^a-z ]", " ");
+        StringBuilder out = new StringBuilder();
+        for (String w : n.trim().split("\\s+")) {
+            if (w.isEmpty() || CLUB_WORDS.contains(w)) continue;
+            out.append(out.length() == 0 ? "" : " ").append(w);
+        }
+        return out.toString();
     }
 
     /** The scoreboard's lines: before the start, the kick-off time and a countdown; during it, the (estimated) minute. */
@@ -420,6 +519,7 @@ final class Sports {
 
     private void football(List<Event> out, String key, long from) throws Exception {
         java.util.Set<String> italian = serieATeams(key);
+        loadItalianBadges();
         String url = "https://api.football-data.org/v4/matches?competitions=SA,CL&dateFrom=" + day(from - 86_400_000L)
                 + "&dateTo=" + day(from + 5 * 86_400_000L);
         JSONArray matches = new JSONObject(get(url, key)).getJSONArray("matches");
@@ -439,8 +539,8 @@ final class Sports {
             e.live = status.equals("IN_PLAY") || status.equals("PAUSED");
             e.home = team(home);
             e.away = team(away);
-            e.logoHome = home.optString("crest");
-            e.logoAway = away.optString("crest");
+            e.logoHome = crestFor(e.home, home.optString("crest"));
+            e.logoAway = crestFor(e.away, away.optString("crest"));
             String[] info = code.equals("SA") ? leagueInfo(4332, "serie a") : leagueInfo(4480, "champions");
             e.logoComp = info[0].isEmpty() ? comp.optString("emblem") : info[0];
             e.art = code.equals("CL") ? art(Config.CHAMPIONS_ART, "asset:sports/champions.webp") : "";
@@ -762,6 +862,7 @@ final class Sports {
 
     private void footballDay(List<Event> out, String key, long start, long end) throws Exception {
         java.util.Set<String> italian = serieATeams(key);
+        loadItalianBadges();
         String url = "https://api.football-data.org/v4/matches?competitions=SA,CL,PL,PD,BL1,FL1&dateFrom=" + day(start - 86_400_000L)
                 + "&dateTo=" + day(end + 86_400_000L);
         JSONArray matches = new JSONObject(get(url, key)).getJSONArray("matches");
@@ -779,8 +880,8 @@ final class Sports {
             e.minutes = 115;
             e.home = team(home);
             e.away = team(away);
-            e.logoHome = home.optString("crest");
-            e.logoAway = away.optString("crest");
+            e.logoHome = crestFor(e.home, home.optString("crest"));
+            e.logoAway = crestFor(e.away, away.optString("crest"));
             e.logoComp = comp.optString("emblem");
             e.italian = italian.contains(home.optString("id")) || italian.contains(away.optString("id")) ? 3 : 0;
             out.add(e);
