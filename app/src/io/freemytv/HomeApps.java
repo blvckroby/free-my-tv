@@ -61,6 +61,8 @@ final class HomeApps {
     static final int PROFILE = 8;
     /** The Sport button: the day's events (SportsActivity). */
     static final int SPORTS = 9;
+    /** The Gemini button: the TV's voice assistant (Gemini on recent Google TV); without one, Google's voice search. */
+    static final int ASSISTANT = 10;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -378,6 +380,16 @@ final class HomeApps {
             case PROFILE:
                 intent = new Intent(Settings.ACTION_SYNC_SETTINGS);
                 break;
+            case ASSISTANT:
+                for (Intent voice : voiceIntents()) {
+                    try {
+                        a.startActivity(voice.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        return true;
+                    } catch (ActivityNotFoundException | SecurityException e) {
+                        AppLog.w("voice: " + voice.getAction() + ": " + e.getMessage());
+                    }
+                }
+                return false;
             default:
                 return false;
         }
@@ -390,6 +402,19 @@ final class HomeApps {
             AppLog.w("couldn't open " + it.label + ": " + e.getMessage());
             return false;
         }
+    }
+
+    /** What the Gemini button tries, in order: the assistant (Gemini), then Google's voice search. */
+    private static Intent[] voiceIntents() {
+        return new Intent[] {new Intent(Intent.ACTION_ASSIST), new Intent("android.intent.action.VOICE_ASSIST"),
+                new Intent("android.speech.action.WEB_SEARCH")};
+    }
+
+    /** Whether the TV has a voice assistant (Gemini, Google Assistant): otherwise the button is "Voice search". */
+    static boolean hasAssistant(Context c) {
+        PackageManager pm = c.getPackageManager();
+        return !pm.queryIntentActivities(new Intent(Intent.ACTION_ASSIST), 0).isEmpty()
+                || !pm.queryIntentActivities(new Intent("android.intent.action.VOICE_ASSIST"), 0).isEmpty();
     }
 
     /**

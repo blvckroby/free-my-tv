@@ -147,7 +147,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private String raceLinesFor = "";
     private float raceLinesWidth;
     /** Top row: the three tabs, then the corner buttons (Live TV, HDMI, Settings, profile). */
-    private static final int TOP = 8;
+    private static final int TOP = 9;
     private final Spring[] topFocus = new Spring[TOP];
     private final RectF[] topRects = new RectF[TOP];
     /** Explore shows 3 cards; Movies and Shows, the country's Top 10 as a carousel (up to 10). */
@@ -195,6 +195,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
     private final RectF platterRect = new RectF();
     private int shelfIndex;
+    // Moving an app on the shelf (OK held): the app being moved, the order before (Back puts it back), and whether the
+    // hold already happened (so letting go of OK doesn't also open the app).
+    private int movingTile = -1;
+    private List<HomeApps.Item> shelfBeforeMove;
+    private boolean okHeld;
+    private static final long HOLD_MS = 600;
+    private final Runnable holdOk = new Runnable() {
+        @Override public void run() {
+            if (!okDown || sheetOpen || zone != Z_SHELF || shelf.isEmpty() || movingTile >= 0) return;
+            okHeld = true;
+            movingTile = shelfIndex;
+            shelfBeforeMove = new ArrayList<>(shelf);
+            click.open();
+            tilesDirty = true;
+            spoken.focusMoved();
+        }
+    };
 
     // Corner capsule
     private List<HomeApps.Item> statusItems = new ArrayList<>();
@@ -264,6 +281,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Matrix imageMatrix = new Matrix();
     private final Paint imageFill = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint border = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint moveRing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint veil = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -419,6 +437,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         running = false;
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(holdOk);
+        if (movingTile >= 0) finishMove(false);
         data.removeListener(this);
         recs.removeListener(this);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
@@ -431,6 +451,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Starting state (Home pressed while the home screen is showing): first app focused, drawer and sheet closed. */
     void reset(boolean animated) {
+        if (movingTile >= 0) finishMove(false);      // Home while moving an app: the old order stays
         zone = Z_SHELF;
         shelfIndex = 0;
         sheetOpen = false;
@@ -454,6 +475,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The three corner buttons, with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
+        lightButtons.add(HomeApps.hasAssistant(getContext())
+                ? HomeApps.action(HomeApps.ASSISTANT, "assistant", "Gemini", "sparkles")
+                : HomeApps.action(HomeApps.ASSISTANT, "assistant", Ui.tr("Busca por voz", "Voice search", "Búsqueda por voz", "Ricerca vocale"), "mic"));
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
         lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
@@ -1263,11 +1287,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 top = i;
             }
         }
+        if (movingTile >= 0) top = movingTile;
         for (int pass = 0; pass < 2; pass++) {
             for (int i = 0; i < shelf.size(); i++) {
                 if ((pass == 0) == (i == top)) continue;
                 drawShelfTile(c, i);
             }
+        }
+        if (movingTile >= 0) {
+            c.drawText(Ui.tr("← → mover   OK confirmar   Voltar cancelar", "← → move   OK confirm   Back cancel",
+                    "← → mover   OK confirmar   Atrás cancelar", "← → sposta   OK conferma   Indietro annulla"),
+                    w / 2f, platterRect.bottom + 30 * k, tipPaint);
         }
     }
 
@@ -1282,6 +1312,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         RectF base = tileRects[i];
         float bw = base.width(), bh = base.height(), r0 = TILE_RADIUS * k;
         float cx = base.centerX(), cy = base.centerY();
+        boolean moving = i == movingTile;
+        if (movingTile >= 0) {
+            // Moving an app: it grows a little more and rises; the others step aside to make room.
+            if (moving) {
+                s += 0.08f;
+                cy -= 10 * k;
+            } else {
+                cx += (i < movingTile ? -16 : 16) * k;
+            }
+        }
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s;
         // Shadow at the resting icon size, enlarged by the transform (so the blur stays cached): short at rest, deep
@@ -1313,6 +1353,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawLogo(c, it, cell, s, 0);
         } else {
             if (it.tile != null) roundImage(c, it.tile, cell, r);
+        }
+        if (moving) {
+            moveRing.setStyle(Paint.Style.STROKE);
+            moveRing.setStrokeWidth(3 * k);
+            moveRing.setColor(0xFFFFFFFF);
+            c.drawRoundRect(cell, r, r, moveRing);
+            float mid = cell.centerY() + Ui.halfCap(tipPaint);
+            c.drawText("‹", cell.left - 20 * k, mid, tipPaint);
+            c.drawText("›", cell.right + 20 * k, mid, tipPaint);
         }
     }
 
@@ -1891,7 +1940,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             final List<HomeApps.Item> d = drawerList(c);
             final List<HomeApps.Item> o = HomeApps.others(c);
             handler.post(() -> {
-                setShelf(s);
+                if (movingTile < 0) setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
                 if (!sheetOpen) setOthers(o);
@@ -1922,9 +1971,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 // Opens on release, and only if the press happened here: the release of an OK pressed inside another
                 // app opens nothing.
                 if (down) {
-                    if (e.getRepeatCount() == 0) okDown = true;
+                    if (e.getRepeatCount() == 0) {
+                        okDown = true;
+                        if (zone == Z_SHELF && movingTile < 0) handler.postDelayed(holdOk, HOLD_MS);
+                    }
                 } else {
-                    if (okDown && !e.isCanceled() && spoken.keyClick()) activate();
+                    handler.removeCallbacks(holdOk);
+                    if (okHeld) {
+                        okHeld = false;           // the hold started moving the app: letting go opens nothing
+                    } else if (movingTile >= 0) {
+                        if (okDown && !e.isCanceled()) finishMove(true);
+                    } else if (okDown && !e.isCanceled() && spoken.keyClick()) {
+                        activate();
+                    }
                     okDown = false;
                 }
                 return true;
@@ -1942,6 +2001,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void back() {
+        if (movingTile >= 0) {
+            finishMove(false);
+            return;
+        }
         if (sheetOpen) {
             closeSheet();
         } else if (zone == Z_DRAWER) {
@@ -1959,6 +2022,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void move(int dx, int dy) {
         if (sheetOpen) {
             moveGrid(dx, dy);
+            return;
+        }
+        if (movingTile >= 0) {
+            // ← → carry the app to its new place; ↑ ↓ do nothing until OK (confirm) or Back (cancel).
+            int to = Math.max(0, Math.min(shelf.size() - 1, movingTile + dx));
+            if (dx == 0 || to == movingTile) return;
+            List<HomeApps.Item> list = new ArrayList<>(shelf);
+            list.add(to, list.remove(movingTile));
+            shelf = list;
+            movingTile = shelfIndex = to;
+            crispLogos.clear();
+            retarget(false);
+            click.move();
+            tilesDirty = true;
             return;
         }
         if (moveLight(dx, dy)) return;
@@ -2023,6 +2100,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         retarget(false);
         click.move();
+    }
+
+    /** Ends moving an app: `keep` saves the new order (it stays after a restart), otherwise the old one comes back. */
+    private void finishMove(boolean keep) {
+        if (keep) {
+            List<String> packages = new ArrayList<>();
+            for (HomeApps.Item it : shelf) if (it.pkg != null) packages.add(it.pkg);
+            Prefs.setShelf(packages);
+        } else if (shelfBeforeMove != null) {
+            HomeApps.Item moved = shelf.get(movingTile);
+            shelf = shelfBeforeMove;
+            shelfIndex = Math.max(0, shelf.indexOf(moved));     // focus stays on the app that was being moved
+        }
+        movingTile = -1;
+        shelfBeforeMove = null;
+        crispLogos.clear();
+        retarget(false);
+        click.move();
+        tilesDirty = true;
     }
 
     private static int nearest(RectF[] rects, float x) {
@@ -2977,6 +3073,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 drawAvatar(c, cell.centerX(), cell.centerY(), rad - 6 * k * s, f);
             } else if (lightButtons.get(i).kind == HomeApps.SPORTS) {
                 drawBall(c, cell.centerX(), cell.centerY(), 15 * k * s, blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+            } else if ("mic".equals(lightButtons.get(i).symbol)) {
+                drawMic(c, cell.centerX(), cell.centerY(), 15 * k * s, blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
             } else {
                 Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 27 * k * s,
                         blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
@@ -3012,6 +3110,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         ballPath.close();
         c.drawPath(ballPath, ballStroke);
+    }
+
+    /** A microphone as an icon (voice search): the capsule, its stand and base. */
+    private void drawMic(Canvas c, float cx, float cy, float r, int color) {
+        ballStroke.setStyle(Paint.Style.STROKE);
+        ballStroke.setStrokeWidth(2.4f * k);
+        ballStroke.setStrokeCap(Paint.Cap.ROUND);
+        ballStroke.setColor(color);
+        float hw = r * 0.42f;
+        tmp.set(cx - hw, cy - r, cx + hw, cy + r * 0.25f);
+        c.drawRoundRect(tmp, hw, hw, ballStroke);
+        tmp.set(cx - r * 0.72f, cy - r * 0.55f, cx + r * 0.72f, cy + r * 0.55f);
+        c.drawArc(tmp, 20, 140, false, ballStroke);
+        c.drawLine(cx, cy + r * 0.55f, cx, cy + r * 0.95f, ballStroke);
+        c.drawLine(cx - r * 0.38f, cy + r * 0.95f, cx + r * 0.38f, cy + r * 0.95f, ballStroke);
     }
 
     /** The Google account: its initial on a colored disc, or a person's silhouette while the name isn't known. */
