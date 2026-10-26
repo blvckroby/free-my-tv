@@ -29,11 +29,11 @@ import java.util.concurrent.Executors;
  *  - Serie A and Champions League: football-data.org (needs config.properties "football_key", free);
  *  - Formula 1: Jolpica (the Ergast successor, no key);
  *  - MotoGP and tennis finals: TheSportsDB's free key (partial calendars).
- * One event at most becomes a card (a Recs.Pick of kind "sport") in the 24 hours around it; the rest of Explore stays
- * films and shows. Which app opens it comes from config.properties "sports_apps" (first one installed).
+ * One event at most becomes the scoreboard (a Recs.Pick of kind "sport"), up to 4 days ahead, with the next ones beside it;
+ * films and shows stay in their tabs. Which app opens it comes from config.properties "sports_apps" (first one installed).
  */
 final class Sports {
-    private static final long EVERY = 30 * 60_000L, FAST = 5 * 60_000L, AHEAD = 30 * 3600_000L, WEEK = 7 * 86_400_000L;
+    private static final long EVERY = 30 * 60_000L, FAST = 5 * 60_000L, AHEAD = 4 * 86_400_000L, WEEK = 7 * 86_400_000L;
     static final int SERIE_A = 0, CHAMPIONS = 1, EUROPA = 2, F1 = 3, MOTO = 4, TENNIS = 5, PREMIER = 6, LALIGA = 7, BUNDES = 8, LIGUE1 = 9;   // 0 to 5 also the priority order
     private static final int[] ACCENT = {0xFF0B5FA5, 0xFF1B2A8A, 0xFFE8650A, 0xFF14141C, 0xFF0E0E12, 0xFF2E8B57, 0xFF37003C, 0xFFEE8707, 0xFFD3010C, 0xFF091C3E};
 
@@ -405,7 +405,7 @@ final class Sports {
     private void football(List<Event> out, String key, long from) throws Exception {
         java.util.Set<String> italian = serieATeams(key);
         String url = "https://api.football-data.org/v4/matches?competitions=SA,CL&dateFrom=" + day(from - 86_400_000L)
-                + "&dateTo=" + day(from + 3 * 86_400_000L);
+                + "&dateTo=" + day(from + 5 * 86_400_000L);
         JSONArray matches = new JSONObject(get(url, key)).getJSONArray("matches");
         for (int i = 0; i < matches.length(); i++) {
             JSONObject m = matches.getJSONObject(i);
@@ -494,7 +494,7 @@ final class Sports {
         boolean tennis = sport.equals("Tennis"), soccer = sport.equals("Soccer");
         String[] moto = sport.equals("Motorsport") ? leagueInfo(4407, "moto") : new String[] {"", ""};
         String[] europa = soccer ? leagueInfo(4481, "europa") : new String[] {"", ""};
-        for (int d = 0; d < 3; d++) {
+        for (int d = 0; d < 5; d++) {
             long when = System.currentTimeMillis() + d * 86_400_000L;
             JSONObject o = new JSONObject(get("https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=" + day(when)
                     + "&s=" + sport, null));
