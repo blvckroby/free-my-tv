@@ -127,6 +127,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     });
     private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer;
+    private final Trailer trailer;
     private int zone = Z_SHELF;
 
     // Night look (like Apple's "Automatic" appearance): darker from sunset to sunrise, with a 2 s transition.
@@ -380,6 +381,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
+        trailer = new Trailer(this, recs);
         for (int i = 0; i < TOP; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
@@ -438,6 +440,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(tick);
         handler.removeCallbacks(holdOk);
+        trailer.release();
         if (movingTile >= 0) finishMove(false);
         data.removeListener(this);
         recs.removeListener(this);
@@ -531,6 +534,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
+        trailer.measure();
         setMeasuredDimension(width, height);
     }
 
@@ -551,6 +555,34 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setPivotX(width / 2f);
         sheetLayer.setPivotY(height / 2f);
         place(toastLayer, (width - toastLayer.getMeasuredWidth()) / 2, 0);
+        trailer.layout();
+    }
+
+    // MARK: - Trailer
+
+    /** The trailer's view goes right above the picks, under the buttons, the shelf and the sheet. */
+    void addTrailerView(View v) {
+        addView(v, indexOfChild(heroLayer) + 1);
+    }
+
+    float trailerRadius() {
+        return 18 * k * 1.05f;
+    }
+
+    /** Where the focused title's trailer plays: its opened cover, fully selected. False when there's no such card. */
+    boolean trailerRect(RectF out) {
+        if (!running || zone != Z_CARDS || sheetOpen || drawerOpen || cardIndex >= Math.min(cards.size(), CARDS)) return false;
+        RectF base = cardRects[cardIndex];
+        if (base.width() < base.height()) return false;    // still a poster, not the horizontal cover
+        float s = 1.05f, cx = base.centerX(), cy = base.centerY() - 6 * k;
+        out.set(cx - base.width() * s / 2, cy - base.height() * s / 2, cx + base.width() * s / 2, cy + base.height() * s / 2);
+        return true;
+    }
+
+    /** The title the trailer should follow right now (null: none). */
+    private Recs.Pick trailerPick() {
+        if (zone != Z_CARDS || sheetOpen || drawerOpen || movingTile >= 0 || cardIndex >= Math.min(cards.size(), CARDS)) return null;
+        return cards.get(cardIndex);
     }
 
     private static void place(View v, int x, int y) {
@@ -718,6 +750,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean drawerItemsMoving = step(drawerFocus, dt);
         boolean gridMoving = step(gridFocus, dt) | scroll.step(dt);
         boolean drawerMoving = drawer.step(dt);
+        trailer.want(trailerPick());
         boolean sheetMoving = sheet.step(dt);
         boolean toastFading = tickToast(up);
         boolean heroFading = tickHeroFade(up);

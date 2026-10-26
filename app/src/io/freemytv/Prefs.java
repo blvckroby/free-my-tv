@@ -83,6 +83,12 @@ final class Prefs {
     static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
     static void setQuotes(boolean on) { put("quotes", on); }
 
+    /** A title's trailer plays inside its cover after 5 s on it; muted unless trailerSound. */
+    static boolean trailers() { return sp().getBoolean("trailers", true); }
+    static void setTrailers(boolean on) { put("trailers", on); }
+    static boolean trailerSound() { return sp().getBoolean("trailerSound", false); }
+    static void setTrailerSound(boolean on) { put("trailerSound", on); }
+
     static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
     static void setCoin(int i, boolean on) { put("coin" + i, on); }
 

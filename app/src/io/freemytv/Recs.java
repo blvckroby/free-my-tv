@@ -802,6 +802,41 @@ final class Recs {
         }
     }
 
+    private final Map<String, String> trailers = java.util.Collections.synchronizedMap(new HashMap<String, String>());
+
+    /**
+     * The YouTube key of a title's trailer, in the TV's language first, then English; "" when it has none, null when
+     * it couldn't be asked. Blocking: call it off the UI thread. Kept for the session.
+     */
+    String trailer(Pick p) {
+        if (p == null || p.id == 0 || p.kind == null) return "";
+        String id = key(p), known = trailers.get(id);
+        if (known != null) return known;
+        try {
+            String mine = lang().substring(0, 2);
+            JSONArray videos = get("/" + p.kind + "/" + p.id + "/videos?include_video_language=" + mine + ",en,null")
+                    .getJSONArray("results");
+            String best = "";
+            int score = -1;
+            for (int i = 0; i < videos.length(); i++) {
+                JSONObject v = videos.getJSONObject(i);
+                if (!"YouTube".equals(v.optString("site"))) continue;
+                String type = v.optString("type");
+                int s = ("Trailer".equals(type) ? 8 : "Teaser".equals(type) ? 4 : 0)
+                        + (mine.equals(v.optString("iso_639_1")) ? 16 : 0) + (v.optBoolean("official") ? 2 : 0);
+                if (s < 4) continue;      // clips and featurettes don't play as a trailer
+                if (s > score) {
+                    score = s;
+                    best = v.optString("key", "");
+                }
+            }
+            trailers.put(id, best);
+            return best;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String readKey() {
         String key = Config.TMDB_KEY.trim();
         return key.isEmpty() ? null : key;

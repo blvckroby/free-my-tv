@@ -610,8 +610,8 @@ public class SettingsActivity extends Activity {
         // MARK: - Home Settings and Remote Buttons
 
         private static final String[] LANGUAGES = {"auto", "pt", "en", "es", "it"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
-        /** Home Settings: language, temperature, theme, weather, quotes, then one row per coin. */
-        private static final int COIN_ROWS = 5;
+        /** Home Settings: language, temperature, theme, weather, quotes, trailers, trailer sound, then one row per coin. */
+        private static final int COIN_ROWS = 7;
 
         private boolean dollar() {
             return "BRL".equalsIgnoreCase(Config.CURRENCY.trim());
@@ -624,6 +624,8 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Tema", "Theme"));
             l.add(Ui.tr("Widget do clima", "Weather widget"));
             l.add(Ui.tr("Widget de cotações", "Quotes widget"));
+            l.add(Ui.tr("Trailers automáticos", "Auto trailers", "Tráileres automáticos", "Trailer automatici"));
+            l.add(Ui.tr("Som dos trailers", "Trailer sound", "Sonido de los tráileres", "Audio dei trailer"));
             l.add("Bitcoin");
             l.add("Ethereum");
             l.add("Solana");
@@ -642,6 +644,8 @@ public class SettingsActivity extends Activity {
             v[2] = theme.equals("light") ? Ui.tr("Claro", "Light") : theme.equals("dark") ? Ui.tr("Escuro", "Dark") : Ui.tr("Automático", "Automatic");
             v[3] = onOff(Prefs.weather());
             v[4] = onOff(Prefs.quotes());
+            v[5] = onOff(Prefs.trailers());
+            v[6] = onOff(Prefs.trailers() && Prefs.trailerSound());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
             for (int i = COIN_ROWS; i < v.length; i++) v[i] = onOff(Prefs.quotes() && Prefs.coin(i - COIN_ROWS));
             return v;
@@ -714,6 +718,11 @@ public class SettingsActivity extends Activity {
                 }
                 case 3: Prefs.setWeather(!Prefs.weather()); break;
                 case 4: Prefs.setQuotes(!Prefs.quotes()); break;
+                case 5: Prefs.setTrailers(!Prefs.trailers()); break;
+                case 6:
+                    if (!Prefs.trailers()) return;
+                    Prefs.setTrailerSound(!Prefs.trailerSound());
+                    break;
                 default:
                     if (!Prefs.quotes()) return;
                     Prefs.setCoin(focus - COIN_ROWS, !Prefs.coin(focus - COIN_ROWS));
