@@ -309,8 +309,20 @@ final class Sports {
         return own.isEmpty() ? otherwise : own;
     }
 
-    /** app/assets/sports/crests/<name>.png (or .webp), the name in lowercase without spaces: venezia.png, hellasverona.png. */
+    /** Crests chosen by hand (the current ones; the sources still had the old ones). Wikipedia's PNG renderings. */
+    private static final java.util.Map<String, String> CREST_LINKS = new java.util.HashMap<>();
+    static {
+        CREST_LINKS.put("venezia", "https://upload.wikimedia.org/wikipedia/it/thumb/7/73/Venezia_FC_Logo_2026.svg/330px-Venezia_FC_Logo_2026.svg.png");
+        CREST_LINKS.put("parma", "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Logo_Parma_Calcio_1913_%28adozione_2016%29.svg/330px-Logo_Parma_Calcio_1913_%28adozione_2016%29.svg.png");
+    }
+
+    /**
+     * The crest chosen for a team: one of CREST_LINKS, else the person's own file app/assets/sports/crests/<name>.png
+     * (or .webp), the name in lowercase without spaces (venezia.png, hellasverona.png).
+     */
     private String localCrest(String team) {
+        String linked = CREST_LINKS.get(norm(team));
+        if (linked != null) return linked;
         if (crestAssets == null) crestAssets = list("sports/crests");
         if (crestAssets.isEmpty()) return "";
         String slug = norm(team).replace(" ", "");

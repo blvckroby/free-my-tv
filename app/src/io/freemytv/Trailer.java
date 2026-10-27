@@ -130,7 +130,7 @@ final class Trailer {
         // The cover's rounded corners, in the page's pixels.
         int radius = Math.round(host.trailerRadius() / host.getResources().getDisplayMetrics().density);
         return "(function(){if(window.fmtG==" + generation + ")return;window.fmtG=" + generation + ";"
-                + "var G=" + generation + ",M=" + (muted ? "true" : "false") + ",said={};"
+                + "var G=" + generation + ",M=" + (muted ? "true" : "false") + ",said={},on=0;"
                 + "function s(x){if(said[x])return;said[x]=1;try{FMT.state(G,x)}catch(e){}}"
                 + "var st=document.createElement('style');st.textContent='html,body{background:transparent!important;overflow:hidden!important}"
                 + "html{opacity:0;transition:opacity .6s ease}html.fmt-on{opacity:1}"
@@ -141,12 +141,16 @@ final class Trailer {
                 + ".html5-video-player,#player{background:#000!important;border-radius:" + radius + "px!important;overflow:hidden!important}"
                 + "video{object-fit:cover!important}';"
                 + "document.head.appendChild(st);"
-                + "function err(){var e=document.querySelector('.ytp-error');"
-                + "if(e&&e.offsetParent!==null){s('error '+(e.innerText||'').replace(/\\s+/g,' ').slice(0,90));return true}return false}"
+                // YouTube keeps an empty error box in the page: only a visible one with a message, before any playing, counts.
+                + "function err(){if(on)return false;var e=document.querySelector('.ytp-error'),t=e?(e.innerText||'').replace(/\\s+/g,' ').trim():'';"
+                + "if(e&&e.offsetParent!==null&&t){s('error '+t.slice(0,90));return true}return false}"
                 + "function hook(){if(err())return;var v=document.querySelector('video');if(!v){setTimeout(hook,200);return}"
                 + "window.fmtV=v;v.muted=M;"
-                + "v.addEventListener('playing',function(){document.documentElement.classList.add('fmt-on');s('playing')});"
-                + "v.addEventListener('ended',function(){document.documentElement.classList.remove('fmt-on');s('ended')});"
+                + "v.addEventListener('playing',function(){on=1;document.documentElement.classList.add('fmt-on');s('playing')});"
+                // A short clip before the trailer (an ad, YouTube's bumper) also "ends": only the trailer's end counts.
+                + "v.addEventListener('ended',function(){if(v.duration&&v.duration<20){s('short clip ended');return}"
+                + "document.documentElement.classList.remove('fmt-on');s('ended')});"
+                + "v.addEventListener('pause',function(){s('paused at '+Math.round(v.currentTime)+'s')});"
                 + "s('ready')}"
                 + "window.fmtGo=function(){var v=window.fmtV;if(!v){setTimeout(fmtGo,200);return}v.muted=M;"
                 + "var p=v.play();if(p&&p.catch)p.catch(function(){v.muted=true;v.play()});"
