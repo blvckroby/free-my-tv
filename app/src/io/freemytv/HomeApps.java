@@ -61,6 +61,8 @@ final class HomeApps {
     static final int PROFILE = 8;
     /** The Sport button: the day's events (SportsActivity). */
     static final int SPORTS = 9;
+    /** The Gemini button: the TV's assistant (Gemini or Google Assistant), else the voice search. */
+    static final int ASSISTANT = 10;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -377,6 +379,17 @@ final class HomeApps {
                 break;
             case PROFILE:
                 intent = new Intent(Settings.ACTION_SYNC_SETTINGS);
+                break;
+            case ASSISTANT:
+                intent = null;
+                for (String action : new String[] {Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND,
+                        android.app.SearchManager.INTENT_ACTION_GLOBAL_SEARCH}) {
+                    Intent candidate = new Intent(action);
+                    if (a.getPackageManager().resolveActivity(candidate, 0) != null) {
+                        intent = candidate;
+                        break;
+                    }
+                }
                 break;
             default:
                 return false;
