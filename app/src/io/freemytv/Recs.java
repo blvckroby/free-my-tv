@@ -805,8 +805,9 @@ final class Recs {
     private final Map<String, String> trailers = java.util.Collections.synchronizedMap(new HashMap<String, String>());
 
     /**
-     * The YouTube key of a title's trailer, in the TV's language first, then English; "" when it has none, null when
-     * it couldn't be asked. Blocking: call it off the UI thread. Kept for the session.
+     * The YouTube keys of a title's trailers, best first (the TV's language, then English; trailers before teasers),
+     * up to 3 and comma-separated; "" when it has none, null when it couldn't be asked. Blocking: call it off the UI
+     * thread. Kept for the session.
      */
     String trailer(Pick p) {
         if (p == null || p.id == 0 || p.kind == null) return "";
@@ -816,23 +817,25 @@ final class Recs {
             String mine = lang().substring(0, 2);
             JSONArray videos = get("/" + p.kind + "/" + p.id + "/videos?include_video_language=" + mine + ",en,null")
                     .getJSONArray("results");
-            String best = "";
-            int score = -1;
+            List<int[]> order = new ArrayList<>();     // {score, index}
             for (int i = 0; i < videos.length(); i++) {
                 JSONObject v = videos.getJSONObject(i);
-                if (!"YouTube".equals(v.optString("site"))) continue;
+                if (!"YouTube".equals(v.optString("site")) || v.optString("key", "").isEmpty()) continue;
                 String type = v.optString("type");
                 int s = ("Trailer".equals(type) ? 8 : "Teaser".equals(type) ? 4 : 0)
                         + (mine.equals(v.optString("iso_639_1")) ? 16 : 0) + (v.optBoolean("official") ? 2 : 0);
-                if (s < 4) continue;      // clips and featurettes don't play as a trailer
-                if (s > score) {
-                    score = s;
-                    best = v.optString("key", "");
-                }
+                if (s % 16 >= 4) order.add(new int[] {s, i});      // clips and featurettes don't play as a trailer
             }
-            trailers.put(id, best);
-            return best;
+            java.util.Collections.sort(order, (a, b) -> b[0] - a[0]);
+            StringBuilder best = new StringBuilder();
+            for (int i = 0; i < order.size() && i < 3; i++) {
+                best.append(best.length() == 0 ? "" : ",").append(videos.getJSONObject(order.get(i)[1]).optString("key"));
+            }
+            trailers.put(id, best.toString());
+            AppLog.w("Trailer: " + order.size() + " on TMDB for " + id);
+            return best.toString();
         } catch (Exception e) {
+            AppLog.w("Trailer: TMDB lookup failed for " + id + ": " + e.getMessage());
             return null;
         }
     }

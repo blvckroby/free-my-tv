@@ -56,7 +56,8 @@ final class Sports {
     private final SharedPreferences cache;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ExecutorService art = Executors.newSingleThreadExecutor();     // logos, apart from the schedule fetch
-    private final java.util.Map<String, android.graphics.Bitmap> bitmaps = new java.util.LinkedHashMap<>();
+    // Most recently used last: the calendar shows many crests, and a background or logo still on screen must not drop out.
+    private final java.util.Map<String, android.graphics.Bitmap> bitmaps = new java.util.LinkedHashMap<>(32, 0.75f, true);
     private final java.util.Set<String> loading = new java.util.HashSet<>();
     private final java.util.Map<String, Long> failedAtMap = new java.util.HashMap<>();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -1016,7 +1017,7 @@ final class Sports {
                     failedAtMap.put(url, System.currentTimeMillis());
                 } else {
                     bitmaps.put(url, b);
-                    while (bitmaps.size() > 16) bitmaps.remove(bitmaps.keySet().iterator().next());
+                    while (bitmaps.size() > 48) bitmaps.remove(bitmaps.keySet().iterator().next());
                 }
             }
             if (b != null) main.post(() -> Recs.get(context).changed());

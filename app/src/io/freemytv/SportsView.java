@@ -53,7 +53,8 @@ final class SportsView extends View {
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), image = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint title, count, pill, pillOn, time, comp, team, teamRight, versus, event, place, hint;
-    private final TextPaint pBoard, pWord, pTop, pSub, pTeam, pComp, pOpen, live;
+    private final TextPaint pBoard, pWord, pTop, pSub, pTeam, pComp, pOpen, live, pF1, pMgp;
+    private final String[] raceLines = {"", ""};
     private final RectF box = new RectF(), tmp = new RectF();
     private final Rect src = new Rect();
     private final Path clip = new Path();
@@ -77,7 +78,7 @@ final class SportsView extends View {
         pill.setTextAlign(Paint.Align.CENTER);
         pillOn = paint(Ui.semibold, 24, 0xFF101014);
         pillOn.setTextAlign(Paint.Align.CENTER);
-        time = new TextPaint(Ui.numbers(Ui.displaySemibold, 36 * k, 0xFFFFFFFF));
+        time = new TextPaint(Ui.numbers(Ui.displaySemibold, 28 * k, 0xFFFFFFFF));
         comp = paint(Ui.semibold, 17, 0x99FFFFFF);
         comp.setLetterSpacing(0.08f);
         team = paint(Ui.semibold, 28, 0xFFFFFFFF);
@@ -91,10 +92,10 @@ final class SportsView extends View {
         live = paint(Ui.semibold, 18, 0xFFFFFFFF);
         live.setTextAlign(Paint.Align.CENTER);
         live.setLetterSpacing(0.1f);
-        pBoard = new TextPaint(Ui.numbers(Ui.displaySemibold, 66 * k, 0xFFFFFFFF));
+        pBoard = new TextPaint(Ui.numbers(Ui.displaySemibold, 52 * k, 0xFFFFFFFF));
         pBoard.setTextAlign(Paint.Align.CENTER);
         pBoard.setLetterSpacing(-0.03f);
-        pWord = paint(Ui.displaySemibold, 48, 0xFFFFFFFF);
+        pWord = paint(Ui.displaySemibold, 40, 0xFFFFFFFF);
         pWord.setTextAlign(Paint.Align.CENTER);
         pTop = paint(Ui.semibold, 22, 0xCCFFFFFF);
         pTop.setTextAlign(Paint.Align.CENTER);
@@ -108,6 +109,10 @@ final class SportsView extends View {
         pComp.setLetterSpacing(0.12f);
         pOpen = paint(Ui.semibold, 24, 0xFF101014);
         pOpen.setTextAlign(Paint.Align.CENTER);
+        pF1 = paint(Ui.f1 != null ? Ui.f1 : Ui.displaySemibold, 40, 0xFFFFFFFF);
+        pF1.setTextAlign(Paint.Align.CENTER);
+        pMgp = paint(Ui.mgp != null ? Ui.mgp : Ui.displaySemibold, 40, 0xFFFFFFFF);
+        pMgp.setTextAlign(Paint.Align.CENTER);
         stroke.setStyle(Paint.Style.STROKE);
         reload();
     }
@@ -150,6 +155,7 @@ final class SportsView extends View {
             Row r = rows.get(selected);
             card = sports.card(r.event);
             glowTarget = r.color;
+            splitRace(card);
         } else {
             card = null;
         }
@@ -432,14 +438,22 @@ final class SportsView extends View {
         c.drawRoundRect(box, rad, rad, fill);
         if (card == null) return;
         Recs.Pick p = card;
-        // The competition's picture, filling the card, darker toward the bottom where the text is.
+        // As on the home screen: a flat color (F1, MotoGP), Serie A's gradient or the competition's color, its
+        // picture over it in full (tinted, except on the flat ones), then darker at the bottom where the text is.
         Bitmap art = p.art == null || p.art.isEmpty() ? null : sports.bitmap(p.art, null, 1280);
         if (art == null && p.art != null && !p.art.isEmpty()) pendingLogos = true;
         c.save();
         clip.reset();
         clip.addRoundRect(box, rad, rad, Path.Direction.CW);
         c.clipPath(clip);
-        fill.setShader(new LinearGradient(0, t, 0, b, mix(p.accent, 0xFF000000, 0.15f), mix(p.accent, 0xFF000000, 0.7f), Shader.TileMode.CLAMP));
+        if (p.flat) {
+            fill.setShader(null);
+            fill.setColor(p.accent);
+        } else if (p.gradTop != 0) {
+            fill.setShader(new LinearGradient(0, t, 0, b, p.gradTop, p.gradBottom, Shader.TileMode.CLAMP));
+        } else {
+            fill.setShader(new LinearGradient(l, t, r, b, mix(p.accent, 0xFF000000, 0.45f), p.accent, Shader.TileMode.CLAMP));
+        }
         c.drawRect(box, fill);
         fill.setShader(null);
         if (art != null) {
@@ -447,12 +461,13 @@ final class SportsView extends View {
             int sw = art.getWidth(), sh = art.getHeight();
             if ((float) sw / sh > ratio) sw = Math.round(sh * ratio); else sh = Math.round(sw / ratio);
             src.set((art.getWidth() - sw) / 2, (art.getHeight() - sh) / 2, (art.getWidth() + sw) / 2, (art.getHeight() + sh) / 2);
-            image.setAlpha(p.flat ? 255 : 150);
             c.drawBitmap(art, src, box, image);
-            image.setAlpha(255);
+            if (!p.flat) {
+                fill.setColor(Ui.alpha(mix(p.accent, 0xFF000000, 0.6f), 0.5f));
+                c.drawRect(box, fill);
+            }
         }
-        fill.setShader(new LinearGradient(0, t, 0, b, new int[] {0x33000000, 0x1A000000, 0xB3000000},
-                new float[] {0, 0.45f, 1}, Shader.TileMode.CLAMP));
+        fill.setShader(new LinearGradient(0, t + box.height() * 0.5f, 0, b, 0x00000000, 0x99000000, Shader.TileMode.CLAMP));
         c.drawRect(box, fill);
         fill.setShader(null);
         c.restore();
@@ -461,21 +476,14 @@ final class SportsView extends View {
         c.drawRoundRect(box, rad, rad, stroke);
 
         float mx = box.centerX();
-        // The competition: its logo in its own colors, or its name.
+        boolean race = p.home.isEmpty() || p.away.isEmpty();
+        boolean logoBelow = race && p.face == 1;        // Formula 1: its name in its font on top, the logo under
         Bitmap logo = p.logoComp == null || p.logoComp.isEmpty() ? null : sports.bitmap(p.logoComp, null);
         if (logo == null && p.logoComp != null && !p.logoComp.isEmpty()) pendingLogos = true;
-        if (logo != null) {
-            float lh = 72 * k, scale = Math.min(lh / logo.getHeight(), 300 * k / logo.getWidth());
-            float lw = logo.getWidth() * scale;
-            tmp.set(mx - lw / 2, t + 48 * k, mx + lw / 2, t + 48 * k + logo.getHeight() * scale);
-            c.drawBitmap(logo, null, tmp, image);
-        } else {
-            c.drawText(p.label.toUpperCase(Ui.locale()), mx, t + 92 * k, pComp);
-        }
+        if (!logoBelow) drawCompLogo(c, p, logo, mx, t + 48 * k);
 
-        float cy = t + 330 * k;
-        if (!p.home.isEmpty() && !p.away.isEmpty()) {
-            float size = 140 * k, off = 185 * k;
+        if (!race) {
+            float cy = t + 330 * k, size = 140 * k, off = 185 * k;
             drawCrest(c, p.logoHome, p.home, mx - off - size / 2, cy, size, 1);
             drawCrest(c, p.logoAway, p.away, mx + off - size / 2, cy, size, 1);
             float nw = 230 * k;
@@ -483,11 +491,33 @@ final class SportsView extends View {
             c.drawText(TextUtils.ellipsize(name(p.awayShort, p.away), pTeam, nw, TextUtils.TruncateAt.END).toString(), mx + off, cy + size / 2 + 44 * k, pTeam);
             drawBoard(c, p, mx, cy);
         } else {
-            String race = !p.raceName.isEmpty() ? p.raceName : p.title;
-            c.drawText(TextUtils.ellipsize(race == null ? "" : race, pWord, box.width() - 80 * k, TextUtils.TruncateAt.END).toString(), mx, cy - 40 * k, pWord);
-            if (!p.session.isEmpty()) c.drawText(p.session.toUpperCase(Ui.locale()), mx, cy + 6 * k, pTop);
-            drawBoard(c, p, mx, cy + 110 * k);
-            if (!p.place.isEmpty()) c.drawText(p.place, mx, cy + 230 * k, pSub);
+            // The race's name (Formula 1 and MotoGP in their own fonts, in capitals) on up to two lines, the session,
+            // the start time, then the place with its flag.
+            TextPaint face = p.face == 1 ? pF1 : p.face == 2 ? pMgp : pWord;
+            float y = t + (logoBelow ? 130 : 210) * k;
+            for (String line : raceLines) {
+                if (line == null || line.isEmpty()) continue;
+                c.drawText(line, mx, y, face);
+                y += face.getTextSize() * 1.12f;
+            }
+            if (!p.session.isEmpty()) c.drawText(p.session.toUpperCase(Ui.locale()), mx, y + 6 * k, pTop);
+            float by = Math.max(y + 130 * k, t + 400 * k);
+            drawBoard(c, p, mx, by);
+            float py = by + 136 * k;
+            if (!p.place.isEmpty()) {
+                Bitmap flag = p.flag == null || p.flag.isEmpty() ? null : sports.bitmap(p.flag, null);
+                float tw = pSub.measureText(p.place), fw = flag == null ? 0 : 40 * k, gap = flag == null ? 0 : 14 * k;
+                float x = mx - (tw + fw + gap) / 2;
+                if (flag != null) {
+                    float fh = fw * flag.getHeight() / flag.getWidth();
+                    tmp.set(x, py - Ui.cap(pSub) / 2 - fh / 2, x + fw, py - Ui.cap(pSub) / 2 + fh / 2);
+                    c.drawBitmap(flag, null, tmp, image);
+                }
+                pSub.setTextAlign(Paint.Align.LEFT);
+                c.drawText(p.place, x + fw + gap, py, pSub);
+                pSub.setTextAlign(Paint.Align.CENTER);
+            }
+            if (logoBelow) drawCompLogo(c, p, logo, mx, py + 50 * k);
         }
 
         // Where to watch it.
@@ -512,6 +542,41 @@ final class SportsView extends View {
         boolean word = p.board.length() > 0 && !Character.isDigit(p.board.charAt(0));
         c.drawText(p.board, mx, cy + (word ? 16 : 26) * k, word ? pWord : pBoard);
         if (!p.boardSub.isEmpty()) c.drawText(p.boardSub, mx, cy + 72 * k, pSub);
+    }
+
+    /** The competition's logo in its own colors, centered at `mx` from `top` (or its name). */
+    private void drawCompLogo(Canvas c, Recs.Pick p, Bitmap logo, float mx, float top) {
+        if (logo != null) {
+            float lh = 72 * k, scale = Math.min(lh / logo.getHeight(), 300 * k / logo.getWidth());
+            float lw = logo.getWidth() * scale;
+            tmp.set(mx - lw / 2, top, mx + lw / 2, top + logo.getHeight() * scale);
+            c.drawBitmap(logo, null, tmp, image);
+        } else {
+            c.drawText(p.label.toUpperCase(Ui.locale()), mx, top + 44 * k, pComp);
+        }
+    }
+
+    /** Splits the race's name into at most two lines that fit the card (the second shortened if needed). */
+    private void splitRace(Recs.Pick p) {
+        raceLines[0] = raceLines[1] = "";
+        if (p == null || (!p.home.isEmpty() && !p.away.isEmpty())) return;
+        String name = !p.raceName.isEmpty() ? p.raceName : p.title == null ? "" : p.title;
+        if (p.face != 0) name = name.toUpperCase(Ui.locale());
+        TextPaint face = p.face == 1 ? pF1 : p.face == 2 ? pMgp : pWord;
+        float width = (getWidth() - SIDE * k - PANEL_L * k) - 80 * k;
+        if (width <= 0) width = 540 * k;
+        String[] words = name.split(" ");
+        StringBuilder first = new StringBuilder(), rest = new StringBuilder();
+        int i = 0;
+        for (; i < words.length; i++) {
+            String next = first.length() == 0 ? words[i] : first + " " + words[i];
+            if (first.length() > 0 && face.measureText(next) > width) break;
+            first.setLength(0);
+            first.append(next);
+        }
+        for (; i < words.length; i++) rest.append(rest.length() == 0 ? "" : " ").append(words[i]);
+        raceLines[0] = TextUtils.ellipsize(first.toString(), face, width, TextUtils.TruncateAt.END).toString();
+        raceLines[1] = TextUtils.ellipsize(rest.toString(), face, width, TextUtils.TruncateAt.END).toString();
     }
 
     private static String name(String shortName, String full) {
