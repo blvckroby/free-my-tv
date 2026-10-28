@@ -53,6 +53,7 @@ final class Config {
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String TMDB_SESSION = "$(prop tmdb_session '')";
     static final String FOOTBALL_KEY = "$(prop football_key '')";
+    static final String MDBLIST_KEY = "$(prop mdblist_key '')";
     static final String CHAMPIONS_ART = "$(prop champions_art '')";
     static final String SERIEA_ART = "$(prop seriea_art '')";
     static final String EUROPA_ART = "$(prop europa_art '')";

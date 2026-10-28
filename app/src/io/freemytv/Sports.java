@@ -172,6 +172,12 @@ final class Sports {
         return out;
     }
 
+    /** The competition's logo: the app's own (app/assets/sports/logos) if there is one, else the one found online. */
+    String logoFor(Event e) {
+        String own = asset(true, LOGO_ASSET[e.sport]);
+        return own.isEmpty() ? e.logoComp : own;
+    }
+
     /** The card for one event, with the scoreboard's lines worked out for `now`. */
     private Recs.Pick pickFor(Event best, long now) {
         String[] opener = opener();
@@ -183,8 +189,7 @@ final class Sports {
         p.logoHome = best.logoHome;
         p.logoAway = best.logoAway;
         // The person's own logo (app/assets/sports/logos) wins over the one found online; it keeps its colors.
-        String ownLogo = asset(true, LOGO_ASSET[best.sport]);
-        p.logoComp = ownLogo.isEmpty() ? best.logoComp : ownLogo;
+        p.logoComp = logoFor(best);
         // The competition's own picture is chosen here, not saved with the event, so a new picture applies at once:
         // the link in config.properties, then the picture in app/assets/sports, then the one found online.
         String bundled = asset(false, ASSET[best.sport]);
@@ -872,7 +877,7 @@ final class Sports {
                     failedAtMap.put(url, System.currentTimeMillis());
                 } else {
                     bitmaps.put(url, b);
-                    while (bitmaps.size() > 16) bitmaps.remove(bitmaps.keySet().iterator().next());
+                    while (bitmaps.size() > 48) bitmaps.remove(bitmaps.keySet().iterator().next());
                 }
             }
             if (b != null) main.post(() -> Recs.get(context).changed());
