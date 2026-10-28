@@ -103,7 +103,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // Matchday (the design of the HTML preview): the time, date and weather in one line at the top; the scoreboard and
     // the "Next" list; the chips (For You, Movies, Shows) with the row of posters below, the selected one opened up into
     // its cover; the shelf at the bottom. Always the dark look.
-    private static final float M_HEADER_BASE = 94, M_SPORT_TOP = 126, M_SPORT_H = 344, M_HERO_W = 1240, M_RAIL_X = 1356;
+    private static final float M_HEADER_BASE = 94, M_SPORT_TOP = 126, M_SPORT_H = 344, M_HERO_W = 1080, M_RAIL_X = 1196;
     private static final float M_CHIPS_TOP = 494, M_CHIPS_H = 46, M_ROW_TOP = 556, M_ROW_H = 300;
     private static final float M_POSTER_W = 200, M_COVER_W = 533, M_ROW_GAP = 24;
     private static final int Z_SPORT = 6, Z_CHIPS = 7;
@@ -664,8 +664,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** While the title card grows or shrinks: the trailer follows it, the home screen fades under it. */
     private void stepSpot() {
         float p = spot.progress();
+        if (p < 0.001f && !spot.isOpen()) {
+            // In its card: it follows the card as it moves (it may still be opening from poster to cover).
+            if (spotShown > 0.001f) {           // just closed: corners back, the home screen fully back
+                trailer.round(trailerRadius());
+                motionDirty = true;
+            }
+            spotShown = 0;
+            if (trailerRect(spotRect)) trailer.place(spotRect);
+            return;
+        }
         if (Math.abs(p - spotShown) < 0.001f) return;
-        boolean ended = p < 0.001f && spotShown > 0;
         spotShown = p;
         motionDirty = true;
         if (trailerRect(spotRect) || spot.isOpen()) {
@@ -674,7 +683,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     spotRect.bottom + (h - spotRect.bottom) * p);
             trailer.place(spotRect);
         }
-        if (ended) trailer.round(trailerRadius());
     }
 
     /** The title the trailer should follow right now (null: none). */
@@ -761,9 +769,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lRailSmall = Ui.text(Ui.medium, 16 * k, L_FAINT);
         lRailText = Ui.text(Ui.semibold, 23 * k, L_INK);
         lRailMore = Ui.text(Ui.semibold, 21 * k, L_DIM);
-        lBadge = Ui.text(Ui.semibold, 14 * k, 0xFFFFFFFF);
+        lBadge = Ui.text(Ui.semibold, 12 * k, 0xFFFFFFFF);
         lBadge.setTextAlign(Paint.Align.CENTER);
-        lBadge.setLetterSpacing(0.04f);
+        lBadge.setLetterSpacing(0.06f);
         lSportMono = Ui.text(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
         lSportMono.setTextAlign(Paint.Align.CENTER);
         lCaption = Ui.text(Ui.medium, 30 * k, L_DIM);
@@ -3011,34 +3019,42 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(p.title, row.left + 20 * k, cy + Ui.halfCap(lRailMore), lRailMore);
                 continue;
             }
-            float x = row.left + 20 * k;
+            // As in the preview: the competition's logo (or its dot) at the left; the day above; below it the time, the
+            // two sides with their crests (or the race); at the right where it's on (DAZN and Sky logos, other tags).
             Bitmap own = p.logoComp.startsWith("asset:") ? sports.bitmap(p.logoComp, null) : null;
+            Bitmap online = own == null && !p.logoComp.isEmpty() ? sports.bitmap(p.logoComp, null) : null;
             if (own != null) {
-                drawLogo(c, own, x + 10 * k, cy, 34 * k, 34 * k, false);
+                drawLogo(c, own, row.left + 30 * k, cy, 36 * k, 36 * k, false);
+            } else if (online != null) {
+                bitmapPaint.setColorFilter(f > 0.5f ? darkLogo : whiteLogo);
+                float bs = Math.min(36 * k / online.getWidth(), 36 * k / online.getHeight());
+                tmp.set(row.left + 30 * k - online.getWidth() * bs / 2, cy - online.getHeight() * bs / 2,
+                        row.left + 30 * k + online.getWidth() * bs / 2, cy + online.getHeight() * bs / 2);
+                c.drawBitmap(online, null, tmp, bitmapPaint);
+                bitmapPaint.setColorFilter(null);
             } else {
                 fill.setColor(p.dot);
-                c.drawCircle(x + 5 * k, cy, 5 * k, fill);
+                c.drawCircle(row.left + 30 * k, cy, 5 * k, fill);
             }
-            x += 30 * k;
-            lRailTime.setColor(p.live ? 0xFFFF3B3B : ink);
-            c.drawText(p.live ? "LIVE" : p.clock, x, cy + 4 * k, lRailTime);
+            float x = row.left + 62 * k, top = row.top;
             lRailSmall.setColor(faint);
-            c.drawText(p.day, x, cy + 26 * k, lRailSmall);
-            x += 100 * k;
+            c.drawText(p.live ? Ui.tr("Ao vivo", "Live now", "En vivo", "In diretta") : p.day, x, top + 23 * k, lRailSmall);
             float right = row.right - 18 * k;
             List<String> badges = p.event == null ? null : railBadges.get(p.event);
-            if (badges != null && !badges.isEmpty()) right = drawBadges(c, badges, right, cy, f) - 6 * k;
+            if (badges != null && !badges.isEmpty()) right = drawBadges(c, badges, right, cy, f) - 12 * k;
             c.save();
             c.clipRect(x, row.top, right, row.bottom);
-            lRailSmall.setColor(dim);
-            c.drawText(p.label, x, cy - 12 * k, lRailSmall);
+            float ty = top + 49 * k;
+            lRailText.setColor(p.live ? 0xFFFF3B3B : ink);
+            String time = p.live ? "LIVE" : p.clock;
+            c.drawText(time, x, ty, lRailText);
+            x += lRailText.measureText(time) + 14 * k;
             lRailText.setColor(ink);
-            float ty = cy + 20 * k;
             if (!p.home.isEmpty() && !p.away.isEmpty()) {
                 x = railSide(c, sports.bitmap(p.logoHome, p.home), p.homeShort, x, ty);
                 lRailText.setColor(faint);
                 c.drawText("–", x, ty, lRailText);
-                x += lRailText.measureText("–") + 10 * k;
+                x += lRailText.measureText("–") + 8 * k;
                 lRailText.setColor(ink);
                 railSide(c, sports.bitmap(p.logoAway, p.away), p.awayShort, x, ty);
             } else {
@@ -3057,31 +3073,51 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** Where it's on, right-aligned in the row (DAZN yellow, SKY blue, PRIME light blue, others grey); returns the left edge. */
+    private final Map<String, Bitmap> broadcasters = new HashMap<>();
+    private final android.graphics.PorterDuffColorFilter darkLogo =
+            new android.graphics.PorterDuffColorFilter(0xFF111111, android.graphics.PorterDuff.Mode.SRC_IN);
+
+    /** The DAZN or Sky logo (white, app/assets/broadcasters), or null for the others. */
+    private Bitmap broadcaster(String name) {
+        if (!name.equals("DAZN") && !name.equals("SKY")) return null;
+        if (!broadcasters.containsKey(name)) {
+            Bitmap b = null;
+            try (java.io.InputStream in = getContext().getAssets().open("broadcasters/" + name.toLowerCase(java.util.Locale.ROOT) + ".png")) {
+                b = android.graphics.BitmapFactory.decodeStream(in);
+            } catch (java.io.IOException e) {
+                AppLog.w("broadcaster logo " + name + ": " + e.getMessage());
+            }
+            broadcasters.put(name, b);
+        }
+        return broadcasters.get(name);
+    }
+
+    /**
+     * Where it's on, right-aligned in the row: the DAZN and Sky logos (white; black on the focused row's white pill),
+     * the others as small tags (Prime, TV8, Rai, L1+). Returns the left edge.
+     */
     private float drawBadges(Canvas c, List<String> badges, float right, float cy, float focus) {
-        float bh = 24 * k, x = right;
+        float x = right;
         for (int j = badges.size() - 1; j >= 0; j--) {
             String b = badges.get(j);
-            float bw = lBadge.measureText(b) + 16 * k;
-            tmp.set(x - bw, cy - bh / 2, x, cy + bh / 2);
-            int bg, ink = 0xFFFFFFFF;
-            if (b.equals("DAZN")) {
-                bg = 0xFFF2FF00;
-                ink = 0xFF111111;
-            } else if (b.equals("SKY")) {
-                bg = 0xFF0C5BD6;
-            } else if (b.equals("PRIME")) {
-                bg = 0xFF1A98FF;
-            } else {        // TV8, Rai, L1+: a quiet grey tag that reads on the white focus pill too
-                bg = blend(tone(0x24000000, 0x33FFFFFF), 0x1F000000, focus);
-                ink = blend(tone(L_INK, WHITE), L_INK, focus);
+            Bitmap logo = broadcaster(b);
+            if (logo != null) {
+                float lh = 22 * k, lw = Math.min(70 * k, logo.getWidth() * lh / logo.getHeight());
+                tmp.set(x - lw, cy - lh / 2, x, cy + lh / 2);
+                bitmapPaint.setColorFilter(focus > 0.5f ? darkLogo : null);
+                c.drawBitmap(logo, null, tmp, bitmapPaint);
+                bitmapPaint.setColorFilter(null);
+                x -= lw + 12 * k;
+                continue;
             }
+            float bh = 20 * k, bw = lBadge.measureText(b) + 16 * k;
+            tmp.set(x - bw, cy - bh / 2, x, cy + bh / 2);
             fill.setShader(null);
-            fill.setColor(bg);
-            c.drawRoundRect(tmp, 6 * k, 6 * k, fill);
-            lBadge.setColor(ink);
+            fill.setColor(blend(0x29FFFFFF, 0x1F000000, focus));
+            c.drawRoundRect(tmp, bh / 2, bh / 2, fill);
+            lBadge.setColor(blend(0xFFFFFFFF, L_INK, focus));
             c.drawText(b, tmp.centerX(), cy + Ui.halfCap(lBadge), lBadge);
-            x -= bw + 8 * k;
+            x -= bw + 12 * k;
         }
         return x;
     }
@@ -3089,11 +3125,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** One side in a "Next" row: its badge (when loaded) and name; returns where the next thing goes. */
     private float railSide(Canvas c, Bitmap logo, String name, float x, float y) {
         if (logo != null) {
-            drawLogo(c, logo, x + 14 * k, y - 8 * k, 28 * k, 28 * k, false);
-            x += 37 * k;
+            drawLogo(c, logo, x + 12 * k, y - 8 * k, 24 * k, 24 * k, false);
+            x += 32 * k;
         }
         c.drawText(name, x, y, lRailText);
-        return x + lRailText.measureText(name) + 10 * k;
+        return x + lRailText.measureText(name) + 8 * k;
     }
 
     /** A flag in a circle (its middle, as a square), with a thin light ring. */

@@ -110,9 +110,24 @@ final class Trailer {
         }
     };
 
+    private int waits;              // tries while the card is still opening into its cover
+
     private void load() {
-        if (!host.trailerRect(rect) || (web == null && !create())) {
+        if (!host.trailerRect(rect)) {
+            // The card is still opening from poster to cover: try again in a moment (for up to 2 s).
+            if (waits++ < 13) {
+                final int gen = generation;
+                ui.postDelayed(new Runnable() {
+                    @Override public void run() { if (gen == generation) load(); }
+                }, 150);
+                return;
+            }
             AppLog.w("Trailer: no place for it (" + wanted + ")");
+            ui.removeCallbacks(go);
+            return;
+        }
+        waits = 0;
+        if (web == null && !create()) {
             ui.removeCallbacks(go);
             return;
         }
@@ -208,6 +223,7 @@ final class Trailer {
     /** Stops what plays (or is about to) right away; the cover shows again. */
     void stop() {
         generation++;
+        waits = 0;
         ui.removeCallbacks(prepare);
         ui.removeCallbacks(go);
         hide();
@@ -233,6 +249,8 @@ final class Trailer {
     /** Moves it (the title card grows it to full screen and back). */
     void place(RectF to) {
         if (web == null || web.getVisibility() == View.GONE) return;
+        if (Math.abs(rect.left - to.left) < 0.5f && Math.abs(rect.top - to.top) < 0.5f
+                && Math.abs(rect.right - to.right) < 0.5f && Math.abs(rect.bottom - to.bottom) < 0.5f) return;
         rect.set(to);
         measure();
         layout();

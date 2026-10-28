@@ -43,8 +43,25 @@ final class SkyGuide {
     };
     private static final long EVERY = 30 * 60_000L;
 
+    /** A place to watch it: "Sky Sport Uno" (sky, 201), "DAZN" (dazn), "Prime Video" (prime), "TV8" (free)... */
+    static final class Channel {
+        final String name, kind, number;
+
+        Channel(String name, String kind, String number) {
+            this.name = name;
+            this.kind = kind;
+            this.number = number;
+        }
+    }
+
+    /** Where to watch an event, the first one being the main one, and a note ("Only on DAZN"). */
+    static final class Where {
+        final List<Channel> list = new ArrayList<>();
+        String note = "";
+    }
+
     private static final class Show {
-        String name, kind;
+        String name, kind, number = "";
         long start, end;
         String text;
     }
@@ -71,38 +88,76 @@ final class SkyGuide {
         return Ui.it || "IT".equalsIgnoreCase(Config.TMDB_REGION.trim());
     }
 
+    /** This season's rights, where the guide doesn't find the match (Sky also streams on NOW). */
+    private static String[] rights(int sport) {
+        switch (sport) {
+            case Sports.SERIE_A:
+            case Sports.LALIGA: return new String[] {"DAZN"};
+            case Sports.F1: return new String[] {"Sky Sport F1", "NOW"};
+            case Sports.MOTO: return new String[] {"Sky Sport MotoGP", "NOW"};
+            case Sports.LIGUE1: return new String[] {"Ligue 1+"};
+            default: return new String[] {"Sky Sport", "NOW"};
+        }
+    }
+
+    private static String kindOf(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        return n.contains("dazn") ? "dazn" : n.contains("sky") || n.equals("now") ? "sky" : n.contains("prime") ? "prime" : "other";
+    }
+
     /**
-     * Short labels for where to watch `e` (DAZN, SKY, PRIME, TV8...), at most two; empty outside Italy. While the
-     * day's guide loads, this season's rights; `changed` runs (once) when it arrives.
+     * Where to watch `e` in Italy (empty elsewhere): Serie A always on DAZN (all ten matches) plus Sky's channel for its
+     * three; Champions League on its Sky channel, or on Prime Video when Sky doesn't have it (Wednesday's big match);
+     * the rest on the channel the guide finds, else this season's rights. `changed` runs once when the guide arrives.
      */
+    Where where(Sports.Event e, Runnable changed) {
+        Where w = new Where();
+        if (e == null || !useful()) return w;
+        Day d = day(e.start, changed);
+        List<Show> found = d.loading || !d.ok ? null : channels(d, e);
+        if (e.sport == Sports.SERIE_A || e.sport == Sports.LALIGA) add(w, "DAZN", "dazn", "");
+        if (found != null) for (Show s : found) if (!s.kind.equals("dazn") || e.sport != Sports.SERIE_A) add(w, s.name, s.kind, s.number);
+        boolean sky = false;
+        for (Channel c : w.list) sky |= c.kind.equals("sky");
+        if (found != null && e.sport == Sports.CHAMPIONS && !sky) add(w, "Prime Video", "prime", "");
+        if ((found == null || found.isEmpty()) && e.sport != Sports.SERIE_A && e.sport != Sports.CHAMPIONS) {
+            for (String n : rights(e.sport)) add(w, n, kindOf(n), "");
+        }
+        if (found == null) {
+            if (e.sport == Sports.CHAMPIONS) for (String n : rights(e.sport)) add(w, n, kindOf(n), "");
+            if (e.sport == Sports.SERIE_A) w.note = d.loading
+                    ? Ui.tr("Vendo se também está na Sky…", "Checking whether Sky has it too…", "Viendo si también está en Sky…", "Controllo se è anche su Sky…")
+                    : Ui.tr("Guia da Sky indisponível: não sei se está também na Sky", "Sky's guide is unreachable: can't tell whether Sky has it too",
+                            "Guía de Sky no disponible: no sé si también está en Sky", "Guida Sky non raggiungibile: non so se è anche su Sky");
+            if (e.sport == Sports.CHAMPIONS && !d.loading) w.note = Ui.tr("Guia da Sky indisponível: o jogo grande de quarta passa no Prime Video",
+                    "Sky's guide is unreachable: Wednesday's big match is on Prime Video", "Guía de Sky no disponible: el partidazo del miércoles va en Prime Video",
+                    "Guida Sky non raggiungibile: il big match del mercoledì è su Prime Video");
+        } else if (e.sport == Sports.SERIE_A) {
+            w.note = w.list.size() > 1 ? Ui.tr("Na DAZN e na Sky", "On DAZN and Sky", "En DAZN y en Sky", "Su DAZN e su Sky")
+                    : Ui.tr("Só na DAZN", "Only on DAZN", "Solo en DAZN", "Solo su DAZN");
+        }
+        return w;
+    }
+
+    private static void add(Where w, String name, String kind, String number) {
+        for (Channel c : w.list) if (c.name.equals(name)) return;
+        w.list.add(new Channel(name, kind, number));
+    }
+
+    /** Short labels for the "Next" list (DAZN, SKY, PRIME, TV8, L1+), at most two; NOW is left out (it's Sky's). */
     List<String> badges(Sports.Event e, Runnable changed) {
         List<String> out = new ArrayList<>();
-        if (e == null || !useful()) return out;
-        List<Show> found = channels(e, changed);
-        // Serie A and LaLiga: always on DAZN (all ten matches), plus Sky's channel for its three.
-        if (e.sport == Sports.SERIE_A || e.sport == Sports.LALIGA) add(out, "DAZN");
-        if (found != null) for (Show s : found) add(out, label(s));
-        // The Champions League match Sky doesn't have (Wednesday's big one) is on Prime Video.
-        if (found != null && e.sport == Sports.CHAMPIONS && !out.contains("SKY")) add(out, "PRIME");
-        if ((found == null || found.isEmpty()) && out.isEmpty()) {
-            String usual = e.sport == Sports.LIGUE1 ? "L1+" : e.sport == Sports.LALIGA ? "DAZN" : "SKY";
-            add(out, usual);
+        for (Channel c : where(e, changed).list) {
+            String b = c.kind.equals("dazn") ? "DAZN" : c.kind.equals("sky") ? "SKY" : c.kind.equals("prime") ? "PRIME"
+                    : c.name.equals("Ligue 1+") ? "L1+" : c.name.toUpperCase(Locale.ROOT);
+            if (c.name.equals("NOW") || out.contains(b)) continue;
+            out.add(b);
         }
         return out.size() > 2 ? out.subList(0, 2) : out;
     }
 
-    private static void add(List<String> out, String label) {
-        if (!out.contains(label)) out.add(label);
-    }
-
-    private static String label(Show s) {
-        return s.kind.equals("dazn") ? "DAZN" : s.kind.equals("sky") ? "SKY" : s.name.toUpperCase(Locale.ROOT);
-    }
-
     /** The channels that have `e` on at its start (not the build-up or a replay), or null while the guide loads. */
-    private List<Show> channels(Sports.Event e, Runnable changed) {
-        Day d = day(e.start, changed);
-        if (d.loading || !d.ok) return d.loading ? null : new ArrayList<>();
+    private List<Show> channels(Day d, Sports.Event e) {
         List<Show> out = new ArrayList<>();
         Map<String, Boolean> seen = new HashMap<>();
         boolean sides = !e.home.isEmpty() && !e.away.isEmpty();
@@ -207,6 +262,9 @@ final class SkyGuide {
             }
             if (ch == null) continue;
             Show s = new Show();
+            JSONObject info = x.optJSONObject("channel");
+            int number = info == null ? 0 : info.optInt("number");
+            if (number > 0) s.number = String.valueOf(number);
             s.name = (String) ch[1];
             s.kind = (String) ch[2];
             s.start = parse(x.optString("starttime"));

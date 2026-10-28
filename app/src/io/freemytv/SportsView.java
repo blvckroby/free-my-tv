@@ -48,12 +48,18 @@ final class SportsView extends View {
     private float scroll, scrollTarget, highlight = -1;
     private boolean loading = true, pendingLogos;
     private Recs.Pick card;                 // the selected event, as the big card
+    private SkyGuide.Where where;           // where to watch it (Sky's TV guide), worked out when it's chosen
+    private final Runnable guideChanged = () -> {
+        choose();
+        postInvalidateOnAnimation();
+    };
     private int glow = 0xFF2E8B57, glowTarget = 0xFF2E8B57;
 
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), image = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint title, count, pill, pillOn, time, comp, team, teamRight, versus, event, place, hint;
     private final TextPaint pBoard, pWord, pTop, pSub, pTeam, pComp, pOpen, live, pF1, pMgp;
+    private final TextPaint provLabel, prov, provOn, provNumber, provNote;
     private final String[] raceLines = {"", ""};
     private final RectF box = new RectF(), tmp = new RectF();
     private final Rect src = new Rect();
@@ -113,6 +119,14 @@ final class SportsView extends View {
         pF1.setTextAlign(Paint.Align.CENTER);
         pMgp = paint(Ui.mgp != null ? Ui.mgp : Ui.displaySemibold, 40, 0xFFFFFFFF);
         pMgp.setTextAlign(Paint.Align.CENTER);
+        provLabel = paint(Ui.semibold, 18, 0x99FFFFFF);
+        provLabel.setTextAlign(Paint.Align.CENTER);
+        provLabel.setLetterSpacing(0.12f);
+        prov = paint(Ui.semibold, 22, 0xFFFFFFFF);
+        provOn = paint(Ui.semibold, 22, 0xFF101014);
+        provNumber = paint(Ui.medium, 22, 0x99FFFFFF);
+        provNote = paint(Ui.medium, 19, 0xA6FFFFFF);
+        provNote.setTextAlign(Paint.Align.CENTER);
         stroke.setStyle(Paint.Style.STROKE);
         reload();
     }
@@ -156,8 +170,10 @@ final class SportsView extends View {
             card = sports.card(r.event);
             glowTarget = r.color;
             splitRace(card);
+            where = SkyGuide.get().where(r.event, guideChanged);
         } else {
             card = null;
+            where = null;
         }
     }
 
@@ -477,7 +493,8 @@ final class SportsView extends View {
 
         float mx = box.centerX();
         boolean race = p.home.isEmpty() || p.away.isEmpty();
-        boolean logoBelow = race && p.face == 1;        // Formula 1: its name in its font on top, the logo under
+        // Formula 1: its name in its font on top, the logo under (on top when "In TV su" takes the bottom).
+        boolean logoBelow = race && p.face == 1 && (where == null || where.list.isEmpty());
         Bitmap logo = p.logoComp == null || p.logoComp.isEmpty() ? null : sports.bitmap(p.logoComp, null);
         if (logo == null && p.logoComp != null && !p.logoComp.isEmpty()) pendingLogos = true;
         if (!logoBelow) drawCompLogo(c, p, logo, mx, t + 48 * k);
@@ -520,7 +537,11 @@ final class SportsView extends View {
             if (logoBelow) drawCompLogo(c, p, logo, mx, py + 50 * k);
         }
 
-        // Where to watch it.
+        // Where to watch it: in Italy the channels from Sky's guide ("In TV su"), elsewhere the button of the sports app.
+        if (where != null && !where.list.isEmpty()) {
+            drawWhere(c, mx, l, r, b);
+            return;
+        }
         String app = appName;
         if (!app.isEmpty()) {
             String label = Ui.tr("Abrir ", "Open ", "Abrir ", "Apri ") + app;
@@ -530,6 +551,71 @@ final class SportsView extends View {
             c.drawRoundRect(box, bh / 2, bh / 2, fill);
             c.drawText(label, mx, by + bh / 2 + Ui.halfCap(pOpen), pOpen);
         }
+    }
+
+    /**
+     * "In TV su" at the bottom of the big card: a pill per channel (the main one filled: DAZN yellow, Sky blue, others
+     * white), the channel number beside its name, wrapped onto more lines if needed, and the note under them.
+     */
+    private void drawWhere(Canvas c, float mx, float l, float r, float b) {
+        List<SkyGuide.Channel> list = where.list;
+        float ph = 52 * k, gap = 10 * k, room = r - l - 64 * k;
+        int n = list.size();
+        float[] widths = new float[n];
+        for (int i = 0; i < n; i++) {
+            SkyGuide.Channel ch = list.get(i);
+            widths[i] = (i == 0 ? provOn : prov).measureText(ch.name) + 48 * k + (showNumber(ch) ? provNumber.measureText(ch.number) + 8 * k : 0);
+        }
+        // Lines of pills, centered.
+        int lines = 1;
+        float lineW = 0;
+        for (int i = 0; i < n; i++) {
+            if (lineW > 0 && lineW + gap + widths[i] > room) {
+                lines++;
+                lineW = 0;
+            }
+            lineW += (lineW > 0 ? gap : 0) + widths[i];
+        }
+        float noteH = where.note.isEmpty() ? 0 : 14 * k + 24 * k;
+        float bottom = b - 40 * k - noteH;
+        float top = bottom - lines * ph - (lines - 1) * gap;
+        c.drawText(Ui.tr("Na TV em", "On TV on", "En la TV en", "In TV su").toUpperCase(Ui.locale()), mx, top - 16 * k, provLabel);
+        int i = 0;
+        float y = top;
+        while (i < n) {
+            int j = i;
+            float w = 0;
+            while (j < n && (w == 0 || w + gap + widths[j] <= room)) {
+                w += (w > 0 ? gap : 0) + widths[j];
+                j++;
+            }
+            float x = mx - w / 2;
+            for (int q = i; q < j; q++) {
+                SkyGuide.Channel ch = list.get(q);
+                boolean main = q == 0;
+                box.set(x, y, x + widths[q], y + ph);
+                fill.setColor(!main ? 0x24FFFFFF : ch.kind.equals("dazn") ? 0xFFF2FF00 : ch.kind.equals("sky") ? 0xFF0C5BD6 : 0xFFFFFFFF);
+                c.drawRoundRect(box, ph / 2, ph / 2, fill);
+                TextPaint t = main && !ch.kind.equals("sky") ? provOn : prov;
+                float base = y + ph / 2 + Ui.halfCap(t);
+                c.drawText(ch.name, x + 24 * k, base, t);
+                if (showNumber(ch)) {
+                    provNumber.setColor(main && !ch.kind.equals("sky") ? 0x99101014 : 0x99FFFFFF);
+                    c.drawText(ch.number, x + 24 * k + t.measureText(ch.name) + 8 * k, base, provNumber);
+                }
+                x += widths[q] + gap;
+            }
+            y += ph + gap;
+            i = j;
+        }
+        if (!where.note.isEmpty()) {
+            c.drawText(TextUtils.ellipsize(where.note, provNote, room, TextUtils.TruncateAt.END).toString(), mx, b - 40 * k - 4 * k, provNote);
+        }
+    }
+
+    /** The channel's number beside its name, unless the name already ends with it ("Sky Sport 251"). */
+    private static boolean showNumber(SkyGuide.Channel ch) {
+        return !ch.number.isEmpty() && !Character.isDigit(ch.name.charAt(ch.name.length() - 1));
     }
 
     /** Between the crests: the day above, the time (or the minute) big, the countdown below. */
