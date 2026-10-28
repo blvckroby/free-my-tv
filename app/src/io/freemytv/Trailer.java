@@ -33,7 +33,7 @@ import java.util.concurrent.Executors;
  * The fade is done by the page: view alpha or an outline clip on the WebView left the video black on TVs.
  */
 final class Trailer {
-    private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 15_000;
+    private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 6_000;
     private static final String SITE = "https://freemytv.io/";
     private static final ExecutorService ASK = Executors.newSingleThreadExecutor();
 
@@ -107,6 +107,7 @@ final class Trailer {
         @Override public void run() {
             AppLog.w("Trailer: didn't start in time for " + wanted);
             hide();
+            host.trailerNone(wantedPick);       // the title card opens anyway, with the backdrop
         }
     };
 
@@ -218,6 +219,7 @@ final class Trailer {
 
     /** Over (or nothing playable): fades out and gives the cover back, without trying this title again. */
     private void finish() {
+        if (!playing) host.trailerNone(wantedPick);     // none of them played: the title card with the backdrop
         ui.removeCallbacks(giveUp);
         ui.removeCallbacks(go);
         generation++;

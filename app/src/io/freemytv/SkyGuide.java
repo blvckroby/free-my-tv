@@ -219,14 +219,14 @@ final class SkyGuide {
         try {
             take(get(base + ids), null, shows);
         } catch (Exception e) {
-            error = e.getMessage();
+            error = String.valueOf(e);
         }
         if (shows.isEmpty()) {
             for (Object[] c : CHANNELS) {
                 try {
                     take(get(base + c[0]), c, shows);
                 } catch (Exception e) {
-                    error = e.getMessage();
+                    error = String.valueOf(e);
                 }
             }
         }
@@ -298,6 +298,7 @@ final class SkyGuide {
         Exception last = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            AiaTrust.use(c);        // Sky's server leaves out its intermediate certificate
             c.setConnectTimeout(8000);
             c.setReadTimeout(15000);
             c.setRequestProperty("Accept", "application/json");
