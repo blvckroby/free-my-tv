@@ -135,7 +135,7 @@ final class Trailer {
         measure();
         layout();
         String id = videos[video].replaceAll("[^A-Za-z0-9_-]", "");
-        String url = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=0&mute=1&controls=0&disablekb=1&fs=0&rel=0"
+        String url = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&enablejsapi=1&controls=0&disablekb=1&fs=0&rel=0"
                 + "&iv_load_policy=3&modestbranding=1&playsinline=1&cc_load_policy=0&hl=" + Ui.locale().getLanguage()
                 + "&origin=" + Uri.encode(SITE.substring(0, SITE.length() - 1));
         web.setVisibility(View.INVISIBLE);      // shown once the page is dressed and transparent
@@ -166,8 +166,8 @@ final class Trailer {
                 + "function err(){if(on)return false;var e=document.querySelector('.ytp-error'),t=e?(e.innerText||'').replace(/\\s+/g,' ').trim():'';"
                 + "if(e&&e.offsetParent!==null&&t){s('error '+t.slice(0,90));return true}return false}"
                 + "function hook(){if(err())return;var v=document.querySelector('video');if(!v){setTimeout(hook,200);return}"
-                + "window.fmtV=v;v.muted=M;"
-                + "v.addEventListener('playing',function(){if(near)return;on=1;document.documentElement.classList.add('fmt-on');s('playing')});"
+                + "window.fmtV=v;"
+                + "v.addEventListener('playing',function(){if(near)return;on=1;tune();document.documentElement.classList.add('fmt-on');s('playing')});"
                 // A short clip before the trailer (an ad, YouTube's bumper) also "ends": only the trailer's end counts.
                 + "v.addEventListener('ended',function(){if(v.duration&&v.duration<20){s('short clip ended');return}"
                 + "document.documentElement.classList.remove('fmt-on');s('ended')});"
@@ -176,10 +176,16 @@ final class Trailer {
                 + "var near=0;v.addEventListener('timeupdate',function(){if(!near&&v.duration>20&&v.duration-v.currentTime<6){near=1;"
                 + "document.documentElement.classList.remove('fmt-on');s('ended')}});"
                 + "s('ready')}"
-                + "window.fmtGo=function(){var v=window.fmtV;if(!v){setTimeout(fmtGo,200);return}v.muted=M;"
-                + "var p=v.play();if(p&&p.catch)p.catch(function(){v.muted=true;v.play()});"
-                + "setTimeout(function(){if(v.paused){var b=document.querySelector('.ytp-large-play-button');if(b)b.click();"
-                + "else{v.muted=true;v.play()}}},1500)};"
+                // YouTube's own player starts the video (the <video> alone doesn't load the stream): muted first,
+                // always allowed, then the sound up and the subtitles off once it plays.
+                + "function mp(){return document.getElementById('movie_player')}"
+                + "var tuned=0;function tune(){var p=mp();if(tuned||!p)return;tuned=1;"
+                + "try{p.unloadModule('captions');p.unloadModule('cc')}catch(e){}"
+                + "if(!M){try{p.unMute();p.setVolume(100)}catch(e){}}}"
+                + "window.fmtGo=function(){var p=mp(),v=window.fmtV;if(!p||!p.playVideo){setTimeout(fmtGo,200);return}"
+                + "try{p.playVideo()}catch(e){}"
+                + "setTimeout(function(){var q=mp();if(v&&v.paused&&q){try{q.mute();q.playVideo()}catch(e){}"
+                + "var b=document.querySelector('.ytp-large-play-button');if(v.paused&&b)b.click();s('nudged')}},2000)};"
                 + "setInterval(err,1000);hook();})()";
     }
 
