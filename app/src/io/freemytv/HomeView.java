@@ -128,6 +128,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer;
     private final Trailer trailer;
+    // The title card (Spotlight): 1.2 s after the trailer shows it grows to full screen; without a trailer it opens
+    // with the backdrop. Its details (Recs.title) are fetched as soon as a title is focused.
+    private static final long SPOT_AFTER_MS = 1200, SPOT_NO_TRAILER_MS = 1000;
+    private final Spotlight spot;
+    private String spotFor;             // "kind:id" of the focused title
+    private Recs.Pick spotPick;
+    private Recs.Title spotTitle;
+    private boolean spotWanted;         // open as soon as its details arrive
+    private float spotShown = -1;       // the progress the trailer was last placed at
+    private final Runnable openSpot = this::openSpot;
+    private final RectF spotRect = new RectF();
     private int zone = Z_SHELF;
 
     // Night look (like Apple's "Automatic" appearance): darker from sunset to sunrise, with a 2 s transition.
@@ -170,6 +181,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final String[] RANKS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
     private Paint lDate, lWeather, lHeroTitle, lHeroSmall, lCapTitle, lCapMeta;
+    private Paint lBadge;
+    /** "Next": where each event is on (SkyGuide), worked out when the cards or the guide change, never while drawing. */
+    private final Map<Sports.Event, List<String>> railBadges = new HashMap<>();
+    private final Runnable guideChanged = () -> {
+        updateRailBadges();
+        heroDirty = true;
+    };
     private Paint lBoard, lBoardWord, lBoardLine, lBoardRight, lBoardLineRight, lLive, lSportDay, lSportTeam, lRailHead, lRailTime, lRailSmall, lRailText, lRailMore;
     private Paint lSportMgp, lSportF1, lSportName, lSportMono, lSportLabel, lSportTitle, lSportWhen, lRank, lCaption, lAvatar, lClock, lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip;
     private Shader lightGradient;
@@ -382,6 +400,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
         trailer = new Trailer(this, recs);
+        spot = new Spotlight(a);
+        addView(spot.back, indexOfChild(heroLayer) + 1);     // over the picks; the trailer goes right above it
+        addView(spot.front);                                 // over everything
         for (int i = 0; i < TOP; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
@@ -535,6 +556,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(sheetLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
         trailer.measure();
+        measure(spot.back, width, height);
+        measure(spot.front, width, height);
         setMeasuredDimension(width, height);
     }
 
@@ -556,13 +579,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setPivotY(height / 2f);
         place(toastLayer, (width - toastLayer.getMeasuredWidth()) / 2, 0);
         trailer.layout();
+        spot.back.layout(0, 0, width, height);
+        spot.front.layout(0, 0, width, height);
     }
 
     // MARK: - Trailer
 
     /** The trailer's view goes right above the picks, under the buttons, the shelf and the sheet. */
     void addTrailerView(View v) {
-        addView(v, indexOfChild(heroLayer) + 1);
+        addView(v, indexOfChild(spot.back) + 1);
     }
 
     float trailerRadius() {
@@ -577,6 +602,79 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float s = 1.05f, cx = base.centerX(), cy = base.centerY() - 6 * k;
         out.set(cx - base.width() * s / 2, cy - base.height() * s / 2, cx + base.width() * s / 2, cy + base.height() * s / 2);
         return true;
+    }
+
+    /** Trailer: it plays and shows; in a moment it grows into the title card. */
+    void trailerPlaying() {
+        handler.removeCallbacks(openSpot);
+        handler.postDelayed(openSpot, SPOT_AFTER_MS);
+    }
+
+    /** Trailer: it ended, failed or was stopped; the title card (if open) keeps its backdrop. */
+    void trailerGone() {
+        handler.removeCallbacks(openSpot);
+        spot.trailerGone();
+    }
+
+    /** Trailer: TMDB has none for this title; the title card opens with the backdrop. */
+    void trailerNone(Recs.Pick p) {
+        if (p == null || spotPick != p) return;
+        handler.removeCallbacks(openSpot);
+        handler.postDelayed(openSpot, SPOT_NO_TRAILER_MS);
+    }
+
+    /** Called every frame with the focused title: its details are fetched once, the card closes when it changes. */
+    private void wantSpot(Recs.Pick p) {
+        if (p != null && p == spotPick) return;     // the same title (no new string every frame)
+        if (p == null && spotFor == null) return;
+        boolean film = p != null && ("movie".equals(p.kind) || "tv".equals(p.kind)) && Prefs.trailers();
+        String key = film ? Recs.key(p) : null;
+        if (key == null ? spotFor == null : key.equals(spotFor)) return;
+        handler.removeCallbacks(openSpot);
+        closeSpot();
+        spotFor = key;
+        spotPick = film ? p : null;
+        spotTitle = null;
+        spotWanted = false;
+        if (!film) return;
+        recs.title(p, t -> {
+            if (!key.equals(spotFor) || t == null) return;
+            spotTitle = t;
+            if (spotWanted) openSpot();
+        });
+    }
+
+    private void openSpot() {
+        if (spotPick == null || spot.isOpen() || !Recs.key(spotPick).equals(spotFor)) return;
+        if (spotTitle == null) {        // details still on their way
+            spotWanted = true;
+            return;
+        }
+        spotWanted = false;
+        spot.open(spotPick, spotTitle, Recs.serviceName(spotPick), trailer.playing());
+        trailer.round(0);
+    }
+
+    private void closeSpot() {
+        handler.removeCallbacks(openSpot);
+        spotWanted = false;
+        spot.close();
+    }
+
+    /** While the title card grows or shrinks: the trailer follows it, the home screen fades under it. */
+    private void stepSpot() {
+        float p = spot.progress();
+        if (Math.abs(p - spotShown) < 0.001f) return;
+        boolean ended = p < 0.001f && spotShown > 0;
+        spotShown = p;
+        motionDirty = true;
+        if (trailerRect(spotRect) || spot.isOpen()) {
+            if (spotRect.isEmpty()) spotRect.set(0, 0, w, h);
+            spotRect.set(spotRect.left * (1 - p), spotRect.top * (1 - p), spotRect.right + (w - spotRect.right) * p,
+                    spotRect.bottom + (h - spotRect.bottom) * p);
+            trailer.place(spotRect);
+        }
+        if (ended) trailer.round(trailerRadius());
     }
 
     /** The title the trailer should follow right now (null: none). */
@@ -663,6 +761,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lRailSmall = Ui.text(Ui.medium, 16 * k, L_FAINT);
         lRailText = Ui.text(Ui.semibold, 23 * k, L_INK);
         lRailMore = Ui.text(Ui.semibold, 21 * k, L_DIM);
+        lBadge = Ui.text(Ui.semibold, 14 * k, 0xFFFFFFFF);
+        lBadge.setTextAlign(Paint.Align.CENTER);
+        lBadge.setLetterSpacing(0.04f);
         lSportMono = Ui.text(Ui.displaySemibold, 84 * k, 0xFFFFFFFF);
         lSportMono.setTextAlign(Paint.Align.CENTER);
         lCaption = Ui.text(Ui.medium, 30 * k, L_DIM);
@@ -750,7 +851,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean drawerItemsMoving = step(drawerFocus, dt);
         boolean gridMoving = step(gridFocus, dt) | scroll.step(dt);
         boolean drawerMoving = drawer.step(dt);
-        trailer.want(trailerPick());
+        Recs.Pick focusedPick = trailerPick();
+        wantSpot(focusedPick);
+        trailer.want(focusedPick);
+        stepSpot();
         boolean sheetMoving = sheet.step(dt);
         boolean toastFading = tickToast(up);
         boolean heroFading = tickHeroFade(up);
@@ -797,7 +901,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Drawer and sheet: the layers' positions and opacity (without redrawing their content). */
     private void updateMotion() {
         float d = drawer.value, dc = Ui.clamp(d), s = Ui.clamp(sheet.value);
-        float home = 1 - s, top = home * (1 - smoothstep(0, 0.32f, dc));
+        float home = (1 - s) * (1 - Ui.clamp(spot.progress())), top = home * (1 - smoothstep(0, 0.32f, dc));
         float shift = SHIFT * k;
         float lift = -d * shift;
         show(heroLayer, top, lift);
@@ -2034,6 +2138,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void back() {
+        if (spot.isOpen()) {
+            closeSpot();
+            click.move();
+            return;
+        }
         if (movingTile >= 0) {
             finishMove(false);
             return;
@@ -2053,6 +2162,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        if (spot.isOpen()) closeSpot();      // then the arrow does its usual job (another title stops the trailer)
         if (sheetOpen) {
             moveGrid(dx, dy);
             return;
@@ -2516,6 +2626,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             sportIndex = Math.min(sportIndex, Math.max(0, sport.size() - 1));
             layoutSport();
         }
+        updateRailBadges();
         List<Recs.Pick> list = tab == 0 ? recs.forYou(Recs.FOR_YOU) : recs.top(TAB_KIND[tab]);
         if (!samePicks(list, cards)) {
             cards = list;
@@ -2915,6 +3026,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(p.day, x, cy + 26 * k, lRailSmall);
             x += 100 * k;
             float right = row.right - 18 * k;
+            List<String> badges = p.event == null ? null : railBadges.get(p.event);
+            if (badges != null && !badges.isEmpty()) right = drawBadges(c, badges, right, cy, f) - 6 * k;
             c.save();
             c.clipRect(x, row.top, right, row.bottom);
             lRailSmall.setColor(dim);
@@ -2933,6 +3046,44 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             c.restore();
         }
+    }
+
+    private void updateRailBadges() {
+        railBadges.clear();
+        SkyGuide guide = SkyGuide.get();
+        for (int i = 1; i < Math.min(sportCards.size(), SPORT); i++) {
+            Sports.Event e = sportCards.get(i).event;
+            if (e != null) railBadges.put(e, guide.badges(e, guideChanged));
+        }
+    }
+
+    /** Where it's on, right-aligned in the row (DAZN yellow, SKY blue, PRIME light blue, others grey); returns the left edge. */
+    private float drawBadges(Canvas c, List<String> badges, float right, float cy, float focus) {
+        float bh = 24 * k, x = right;
+        for (int j = badges.size() - 1; j >= 0; j--) {
+            String b = badges.get(j);
+            float bw = lBadge.measureText(b) + 16 * k;
+            tmp.set(x - bw, cy - bh / 2, x, cy + bh / 2);
+            int bg, ink = 0xFFFFFFFF;
+            if (b.equals("DAZN")) {
+                bg = 0xFFF2FF00;
+                ink = 0xFF111111;
+            } else if (b.equals("SKY")) {
+                bg = 0xFF0C5BD6;
+            } else if (b.equals("PRIME")) {
+                bg = 0xFF1A98FF;
+            } else {        // TV8, Rai, L1+: a quiet grey tag that reads on the white focus pill too
+                bg = blend(tone(0x24000000, 0x33FFFFFF), 0x1F000000, focus);
+                ink = blend(tone(L_INK, WHITE), L_INK, focus);
+            }
+            fill.setShader(null);
+            fill.setColor(bg);
+            c.drawRoundRect(tmp, 6 * k, 6 * k, fill);
+            lBadge.setColor(ink);
+            c.drawText(b, tmp.centerX(), cy + Ui.halfCap(lBadge), lBadge);
+            x -= bw + 8 * k;
+        }
+        return x;
     }
 
     /** One side in a "Next" row: its badge (when loaded) and name; returns where the next thing goes. */
@@ -3106,6 +3257,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 drawAvatar(c, cell.centerX(), cell.centerY(), rad - 6 * k * s, f);
             } else if (lightButtons.get(i).kind == HomeApps.SPORTS) {
                 drawBall(c, cell.centerX(), cell.centerY(), 15 * k * s, blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
+            } else if (lightButtons.get(i).kind == HomeApps.ASSISTANT && !"mic".equals(lightButtons.get(i).symbol)) {
+                drawGemini(c, cell.centerX(), cell.centerY(), rad, s);
             } else if ("mic".equals(lightButtons.get(i).symbol)) {
                 drawMic(c, cell.centerX(), cell.centerY(), 15 * k * s, blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
             } else {
@@ -3120,6 +3273,39 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
             }
         }
+    }
+
+    private Bitmap gemini;
+    private final Paint geminiRing = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float geminiRingFor = -1;
+
+    /** Gemini: its star in its own colors, and a 2 px ring with the same gradient (blue below left, lavender above right). */
+    private void drawGemini(Canvas c, float cx, float cy, float rad, float s) {
+        if (gemini == null) {
+            try (java.io.InputStream in = getContext().getAssets().open("gemini.png")) {
+                gemini = android.graphics.BitmapFactory.decodeStream(in);
+            } catch (java.io.IOException e) {
+                AppLog.w("gemini icon: " + e.getMessage());
+            }
+        }
+        if (gemini != null) {
+            float half = 17 * k * s;
+            tmp.set(cx - half, cy - half, cx + half, cy + half);
+            bitmapPaint.setColorFilter(null);
+            c.drawBitmap(gemini, null, tmp, bitmapPaint);
+        }
+        float ringR = rad - 1 * k;
+        if (geminiRingFor != ringR) {     // the gradient follows the button as it grows with the focus
+            geminiRingFor = ringR;
+            geminiRing.setStyle(Paint.Style.STROKE);
+            geminiRing.setStrokeWidth(2 * k);
+            geminiRing.setShader(new LinearGradient(-ringR * 0.71f, ringR * 0.71f, ringR * 0.71f, -ringR * 0.71f,
+                    new int[] {0xFF0C80FD, 0xFF0C80FD, 0xFFA392FB}, new float[] {0, 0.45f, 1}, Shader.TileMode.CLAMP));
+        }
+        c.save();
+        c.translate(cx, cy);
+        c.drawCircle(0, 0, ringR, geminiRing);
+        c.restore();
     }
 
     private final Path ballPath = new Path();

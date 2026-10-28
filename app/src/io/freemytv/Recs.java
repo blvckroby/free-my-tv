@@ -438,6 +438,200 @@ final class Recs {
         main.post(() -> { for (Listener l : new ArrayList<>(listeners)) l.onRecs(); });
     }
 
+    /** What the title card (spotlight) shows: one TMDB call, MDBList's ratings and the images. */
+    static final class Title {
+        String year = "", length = "", cert = "", plot = "", netLabel = "";
+        final List<String> genres = new ArrayList<>();
+        /** {source, value as shown}: imdb, tmdb, trakt, tomatoes, popcorn, metacritic, letterboxd. */
+        final List<String[]> ratings = new ArrayList<>();
+        final List<Bitmap> nets = new ArrayList<>();
+        final List<String> netNames = new ArrayList<>();
+        Bitmap backdrop, logo;
+    }
+
+    private final ExecutorService titleIo = Executors.newSingleThreadExecutor();   // apart from the lists: answers at once
+    private final Map<String, Title> titles = new LinkedHashMap<>();
+    private static final String[] RATING_ORDER = {"imdb", "tmdb", "trakt", "tomatoes", "popcorn", "metacritic", "letterboxd"};
+
+    /** The title card's details for `pick` (cached), delivered on the main thread; null without a key or on failure. */
+    void title(Pick pick, java.util.function.Consumer<Title> callback) {
+        if (pick == null || !hasKey(context) || pick.kind == null) {
+            main.post(() -> callback.accept(null));
+            return;
+        }
+        final String key = key(pick);
+        synchronized (titles) {
+            Title t = titles.get(key);
+            if (t != null) {
+                main.post(() -> callback.accept(t));
+                return;
+            }
+        }
+        titleIo.execute(() -> {
+            Title t = null;
+            try {
+                t = fetchTitle(pick);
+                synchronized (titles) {
+                    titles.put(key, t);
+                    // Full-screen backdrops are big: only the last few titles stay in memory.
+                    while (titles.size() > 3) titles.remove(titles.keySet().iterator().next());
+                }
+            } catch (Exception | OutOfMemoryError e) {
+                AppLog.w("title card: " + e.getClass().getSimpleName() + " " + e.getMessage());
+            }
+            final Title done = t;
+            main.post(() -> callback.accept(done));
+        });
+    }
+
+    private Title fetchTitle(Pick p) throws Exception {
+        boolean tv = "tv".equals(p.kind);
+        Title t = new Title();
+        JSONObject o = get("/" + p.kind + "/" + p.id + "?language=" + lang() + "&append_to_response=watch/providers,"
+                + (tv ? "content_ratings" : "release_dates"));
+        String date = o.optString(tv ? "first_air_date" : "release_date", "");
+        t.year = date.length() >= 4 ? date.substring(0, 4) : "";
+        if (tv) {
+            int seasons = o.optInt("number_of_seasons");
+            if (seasons > 0) t.length = seasons == 1 ? Ui.tr("1 temporada", "1 season", "1 temporada", "1 stagione")
+                    : seasons + Ui.tr(" temporadas", " seasons", " temporadas", " stagioni");
+        } else {
+            int minutes = o.optInt("runtime");
+            if (minutes > 0 && Ui.en) t.length = minutes >= 60 ? (minutes / 60) + "h " + (minutes % 60) + "m" : minutes + "m";
+            else if (minutes > 0) t.length = minutes >= 60 ? (minutes / 60) + " h " + (minutes % 60) + " min" : minutes + " min";
+        }
+        t.cert = certification(o, tv);
+        JSONArray genres = o.optJSONArray("genres");
+        for (int i = 0; genres != null && i < genres.length() && i < 3; i++) {
+            String name = genres.getJSONObject(i).optString("name");
+            t.genres.add(Ui.en ? name : genre(name));
+        }
+        t.plot = o.optString("overview", "").trim();
+        if (t.plot.isEmpty() && !Ui.en) t.plot = get("/" + p.kind + "/" + p.id + "?language=en-US").optString("overview", "").trim();
+        double vote = o.optDouble("vote_average", 0);
+        if (vote > 0) t.ratings.add(new String[] {"tmdb", String.valueOf(Math.round(vote * 10))});
+        ratings(t, p, tv);
+        // Shows: their networks; films: the services that stream them here.
+        JSONArray nets = tv ? o.optJSONArray("networks") : null;
+        if (!tv) {
+            JSONObject wp = o.optJSONObject("watch/providers");
+            JSONObject here = wp == null || wp.optJSONObject("results") == null ? null : wp.optJSONObject("results").optJSONObject(REGION);
+            nets = here == null ? null : here.optJSONArray("flatrate");
+        }
+        t.netLabel = tv ? "Network" : Ui.tr("Em", "On", "En", "Su");
+        for (int i = 0; nets != null && i < nets.length() && t.nets.size() < 4; i++) {
+            JSONObject n = nets.getJSONObject(i);
+            String logo = n.optString("logo_path", "");
+            Bitmap b = logo.isEmpty() || "null".equals(logo) ? null : bitmap("https://image.tmdb.org/t/p/w154" + logo, 300);
+            if (b == null) continue;
+            t.nets.add(b);
+            t.netNames.add(n.optString(tv ? "name" : "provider_name"));
+        }
+        t.logo = p.logo.isEmpty() ? null : fileOrUrl(logoFile(p), LOGOS + p.logo, 800);
+        t.backdrop = p.backdrop == null ? null : fileOrUrl(imageFile(p), COVERS + p.backdrop, 1920);
+        return t;
+    }
+
+    /** The age rating in this country (else in the US): VM14, TV-MA... */
+    private static String certification(JSONObject o, boolean tv) {
+        JSONArray list = o.optJSONObject(tv ? "content_ratings" : "release_dates") == null ? null
+                : o.optJSONObject(tv ? "content_ratings" : "release_dates").optJSONArray("results");
+        String here = "", us = "";
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject c = list.optJSONObject(i);
+            if (c == null) continue;
+            String value = "";
+            if (tv) value = c.optString("rating", "");
+            else {
+                JSONArray dates = c.optJSONArray("release_dates");
+                for (int j = 0; dates != null && j < dates.length() && value.isEmpty(); j++) value = dates.optJSONObject(j).optString("certification", "");
+            }
+            if (value.isEmpty()) continue;
+            if (REGION.equals(c.optString("iso_3166_1"))) here = value;
+            else if ("US".equals(c.optString("iso_3166_1"))) us = value;
+        }
+        return here.isEmpty() ? us : here;
+    }
+
+    /** MDBList (config.properties "mdblist_key", free): IMDb, Trakt, Rotten Tomatoes, Metacritic, Letterboxd... */
+    private void ratings(Title t, Pick p, boolean tv) {
+        String key = Config.MDBLIST_KEY.trim();
+        if (key.isEmpty()) return;
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL("https://api.mdblist.com/tmdb/" + (tv ? "show" : "movie") + "/" + p.id
+                    + "?apikey=" + URLEncoder.encode(key, "UTF-8")).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            c.setRequestProperty("Accept", "application/json");
+            JSONArray list;
+            try {
+                if (c.getResponseCode() != 200) throw new IOException("MDBList returned HTTP " + c.getResponseCode());
+                list = new JSONObject(read(c.getInputStream())).optJSONArray("ratings");
+            } finally {
+                c.disconnect();
+            }
+            Map<String, String> found = new HashMap<>();
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject r = list.optJSONObject(i);
+                if (r == null || r.isNull("value")) continue;
+                double v = r.optDouble("value", 0);
+                if (v <= 0) continue;
+                String source = r.optString("source");
+                boolean decimal = source.equals("imdb") || source.equals("letterboxd");
+                boolean percent = source.equals("tomatoes") || source.equals("popcorn") || source.equals("trakt");
+                found.put(source, (decimal ? String.format(Locale.US, "%.1f", v) : String.valueOf(Math.round(v))) + (percent ? "%" : ""));
+            }
+            if (found.isEmpty()) return;
+            t.ratings.clear();
+            for (String source : RATING_ORDER) if (found.containsKey(source)) t.ratings.add(new String[] {source, found.get(source)});
+        } catch (Exception e) {
+            AppLog.w("MDBList: " + e.getMessage());   // the card keeps TMDB's own rating
+        }
+    }
+
+    /** The image from disk if it's there, else downloaded; scaled down to at most `maxWidth`. */
+    private static Bitmap fileOrUrl(File f, String url, int maxWidth) {
+        if (f != null && f.exists()) {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(f.getPath(), bounds);
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = 1;
+            while (bounds.outWidth / (opts.inSampleSize * 2) >= maxWidth) opts.inSampleSize *= 2;
+            Bitmap b = BitmapFactory.decodeFile(f.getPath(), opts);
+            if (b != null) return b;
+        }
+        return bitmap(url, maxWidth);
+    }
+
+    private static Bitmap bitmap(String url, int maxWidth) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(15000);
+            byte[] data;
+            try (InputStream in = c.getInputStream()) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buffer = new byte[16384];
+                int n;
+                while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+                data = out.toByteArray();
+            } finally {
+                c.disconnect();
+            }
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = 1;
+            while (bounds.outWidth / (opts.inSampleSize * 2) >= maxWidth) opts.inSampleSize *= 2;
+            return BitmapFactory.decodeByteArray(data, 0, data.length, opts);
+        } catch (IOException | RuntimeException e) {
+            AppLog.w("image " + url.substring(url.lastIndexOf('/') + 1) + ": " + e.getMessage());
+            return null;
+        }
+    }
+
     // MARK: - TMDB
 
     private void fetchList(int p) throws Exception {

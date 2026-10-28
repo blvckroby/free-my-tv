@@ -21,17 +21,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The focused title's trailer, playing inside its cover after 3 s on it (TMDB's YouTube trailers, the TV's language
+ * The focused title's trailer, playing inside its cover after 1 s on it (TMDB's YouTube trailers, the TV's language
  * first). One small WebView, made the first time and destroyed when the home screen goes away; moving off the title
- * stops it at once. Muted unless "Trailer sound" is on in Home Settings.
+ * stops it at once. With sound unless "Trailer sound" is off in Home Settings; no subtitles; it fades out 6 s before
+ * the end, so YouTube's end screen with other videos never shows. Once it plays, the home screen can grow it into
+ * the title card (Spotlight): HomeView moves it with place() and squares its corners with round().
  *
- * At 0.8 s the trailers are looked up and YouTube's embed page loads, unseen (with a Referer: without one YouTube
+ * At 0.25 s the trailers are looked up and YouTube's embed page loads, unseen (with a Referer: without one YouTube
  * refuses embeds in apps, errors 152 and 153). A script then hides YouTube's own chrome and watches the video
  * itself; at 3 s it plays and fades in. A trailer YouTube won't play outside its app gives way to the next one.
  * The fade is done by the page: view alpha or an outline clip on the WebView left the video black on TVs.
  */
 final class Trailer {
-    private static final long PREPARE_MS = 800, PLAY_MS = 3000, NO_SHOW_MS = 15_000;
+    private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 15_000;
     private static final String SITE = "https://freemytv.io/";
     private static final ExecutorService ASK = Executors.newSingleThreadExecutor();
 
@@ -42,6 +44,7 @@ final class Trailer {
     private WebView web;
     private boolean broken;         // no WebView on this TV: never try again
     private boolean ready, going;   // the video element is hooked; it was asked to play
+    private boolean playing;        // it plays and shows
     private String wanted;          // "kind:id" of the focused title, or null
     private Recs.Pick wantedPick;
     private String[] videos = new String[0];
@@ -78,6 +81,7 @@ final class Trailer {
                             if (gen != generation) return;
                             if (found == null || found.isEmpty()) {
                                 ui.removeCallbacks(go);
+                                host.trailerNone(p);
                                 return;
                             }
                             videos = found.split(",");
@@ -137,20 +141,25 @@ final class Trailer {
                 + ".ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-pause-overlay,"
                 + ".ytp-large-play-button,.ytp-spinner,.ytp-cued-thumbnail-overlay,.ytp-paid-content-overlay,.ytp-ce-element,"
                 + ".ytp-impression-link,.ytp-youtube-button,.ytp-show-cards-title,.ytp-title,.ytp-endscreen-content,"
-                + ".ytp-contextmenu,.branding-img{display:none!important}"
-                + ".html5-video-player,#player{background:#000!important;border-radius:" + radius + "px!important;overflow:hidden!important}"
+                + ".ytp-contextmenu,.branding-img,.ytp-caption-window-container,.caption-window,.ytp-caption-segment{display:none!important}"
+                + ".html5-video-player,#player{background:#000!important;overflow:hidden!important}"
                 + "video{object-fit:cover!important}';"
                 + "document.head.appendChild(st);"
+                + "var rd=document.createElement('style');rd.id='fmt-r';document.head.appendChild(rd);"
+                + "window.fmtRound=function(r){rd.textContent='.html5-video-player,#player{border-radius:'+r+'px!important}'};fmtRound(" + radius + ");"
                 // YouTube keeps an empty error box in the page: only a visible one with a message, before any playing, counts.
                 + "function err(){if(on)return false;var e=document.querySelector('.ytp-error'),t=e?(e.innerText||'').replace(/\\s+/g,' ').trim():'';"
                 + "if(e&&e.offsetParent!==null&&t){s('error '+t.slice(0,90));return true}return false}"
                 + "function hook(){if(err())return;var v=document.querySelector('video');if(!v){setTimeout(hook,200);return}"
                 + "window.fmtV=v;v.muted=M;"
-                + "v.addEventListener('playing',function(){on=1;document.documentElement.classList.add('fmt-on');s('playing')});"
+                + "v.addEventListener('playing',function(){if(near)return;on=1;document.documentElement.classList.add('fmt-on');s('playing')});"
                 // A short clip before the trailer (an ad, YouTube's bumper) also "ends": only the trailer's end counts.
                 + "v.addEventListener('ended',function(){if(v.duration&&v.duration<20){s('short clip ended');return}"
                 + "document.documentElement.classList.remove('fmt-on');s('ended')});"
                 + "v.addEventListener('pause',function(){s('paused at '+Math.round(v.currentTime)+'s')});"
+                // 6 s before the end it fades out: YouTube's end screen (other videos) never shows.
+                + "var near=0;v.addEventListener('timeupdate',function(){if(!near&&v.duration>20&&v.duration-v.currentTime<6){near=1;"
+                + "document.documentElement.classList.remove('fmt-on');s('ended')}});"
                 + "s('ready')}"
                 + "window.fmtGo=function(){var v=window.fmtV;if(!v){setTimeout(fmtGo,200);return}v.muted=M;"
                 + "var p=v.play();if(p&&p.catch)p.catch(function(){v.muted=true;v.play()});"
@@ -168,6 +177,10 @@ final class Trailer {
             if (going) web.evaluateJavascript("fmtGo()", null);
         } else if ("playing".equals(s)) {
             ui.removeCallbacks(giveUp);
+            if (!playing) {
+                playing = true;
+                host.trailerPlaying();
+            }
         } else if (s.startsWith("error")) {
             if (video + 1 < videos.length) {    // this one won't play outside YouTube: the next one
                 generation++;
@@ -203,9 +216,33 @@ final class Trailer {
     private void hide() {
         ui.removeCallbacks(giveUp);
         ready = going = false;
+        if (playing) {
+            playing = false;
+            host.trailerGone();
+        }
         if (web == null || web.getVisibility() == View.GONE) return;
         web.setVisibility(View.GONE);
         web.loadUrl("about:blank");     // stops the video and its sound
+    }
+
+    /** It plays and shows (the title card can grow it). */
+    boolean playing() {
+        return playing;
+    }
+
+    /** Moves it (the title card grows it to full screen and back). */
+    void place(RectF to) {
+        if (web == null || web.getVisibility() == View.GONE) return;
+        rect.set(to);
+        measure();
+        layout();
+    }
+
+    /** The video's corner radius, in screen pixels (0 at full screen). */
+    void round(float radius) {
+        if (web == null || !ready) return;
+        int px = Math.round(radius / host.getResources().getDisplayMetrics().density);
+        web.evaluateJavascript("window.fmtRound&&fmtRound(" + px + ")", null);
     }
 
     /** The home screen went away: the WebView too (it holds a video decoder and memory). */
