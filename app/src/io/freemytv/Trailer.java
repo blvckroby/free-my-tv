@@ -178,7 +178,12 @@ final class Trailer {
                 + "#b.on{opacity:.99}"
                 + "iframe{position:absolute;left:-12%;top:-12%;width:124%;height:124%;border:0;pointer-events:none}"
                 + "#b.full iframe{left:-6%;top:-6%;width:112%;height:112%}"
-                + "</style></head><body><div id=b><iframe id=f allow='autoplay; encrypted-media' referrerpolicy='strict-origin-when-cross-origin' src='"
+                // TEMPORARY test: a colored strip (does the page reach the screen?) and a plain video (does any video?).
+                + "#t1{position:absolute;left:0;right:0;top:0;height:14%;z-index:2;background:linear-gradient(90deg,#e00,#00e)}"
+                + "#t2{position:absolute;right:3%;bottom:4%;width:34%;z-index:2;border:3px solid #ff0}"
+                + "</style></head><body><div id=b><div id=t1></div>"
+                + "<video id=t2 muted autoplay loop playsinline src='https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'></video>"
+                + "<iframe id=f allow='autoplay; encrypted-media' referrerpolicy='strict-origin-when-cross-origin' src='"
                 + src + "'></iframe></div><script>"
                 + "var G=" + generation + ",M=" + muted + ",f=document.getElementById('f'),b=document.getElementById('b'),"
                 + "said={},heard=0,tuned=0,shown=0,near=0,quiet=0,going=0;"
@@ -208,6 +213,8 @@ final class Trailer {
                 + "var tries=0;function listen(){if(heard||tries++>60)return;"
                 + "try{f.contentWindow.postMessage(JSON.stringify({event:'listening',id:1,channel:'widget'}),'*')}catch(e){}setTimeout(listen,250)}"
                 + "f.onload=function(){s('loaded');listen()};"
+                + "var tv=document.getElementById('t2');tv.addEventListener('playing',function(){s('test video playing '+tv.videoWidth+'x'+tv.videoHeight)});"
+                + "tv.addEventListener('error',function(){s('test video error')});"
                 // Every 2 s while it plays: does the page think it's visible, and does it draw (frames per second)?
                 + "var fr=0;(function raf(){fr++;requestAnimationFrame(raf)})();"
                 + "setInterval(function(){if(shown){try{FMT.vitals(G,document.visibilityState+', '+Math.round(fr/2)+' fps, '"
