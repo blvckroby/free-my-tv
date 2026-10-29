@@ -3019,9 +3019,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(p.title, row.left + 20 * k, cy + Ui.halfCap(lRailMore), lRailMore);
                 continue;
             }
-            // As in the preview: the competition's own colored logo (else its dot: no white silhouettes) at the left; the
+            // As in the preview: the competition's logo in its own colors (else its dot) at the left; the
             // day above; below it the time, the two sides with their crests (or the race); at the right where it's on.
-            Bitmap own = p.logoComp.startsWith("asset:") ? sports.bitmap(p.logoComp, null) : null;
+            Bitmap own = p.logoComp.isEmpty() ? null : sports.bitmap(p.logoComp, null);
             if (own != null) {
                 drawLogo(c, own, row.left + 30 * k, cy, 36 * k, 36 * k, false);
             } else {
