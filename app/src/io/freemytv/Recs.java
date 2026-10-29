@@ -553,10 +553,16 @@ final class Recs {
         return here.isEmpty() ? us : here;
     }
 
+    private static boolean noMdbKeySaid;
+
     /** MDBList (config.properties "mdblist_key", free): IMDb, Trakt, Rotten Tomatoes, Metacritic, Letterboxd... */
     private void ratings(Title t, Pick p, boolean tv) {
         String key = Config.MDBLIST_KEY.trim();
-        if (key.isEmpty()) return;
+        if (key.isEmpty()) {
+            if (!noMdbKeySaid) AppLog.w("MDBList: no mdblist_key in config.properties, only TMDB's rating");
+            noMdbKeySaid = true;
+            return;
+        }
         try {
             HttpURLConnection c = (HttpURLConnection) new URL("https://api.mdblist.com/tmdb/" + (tv ? "show" : "movie") + "/" + p.id
                     + "?apikey=" + URLEncoder.encode(key, "UTF-8")).openConnection();

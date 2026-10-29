@@ -158,7 +158,9 @@ final class Trailer {
                 + "html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}"
                 + "#b{position:absolute;left:0;top:0;right:0;bottom:0;background:#000;overflow:hidden;opacity:0;transition:opacity .6s ease;"
                 + "border-radius:" + radius + "px;-webkit-transform:translateZ(0)}"
-                + "#b.on{opacity:1}"
+                // 0.99, not 1: fully opaque, the TV's WebView moves the video onto a hardware plane under the app's
+                // window, where the cover and the title card hide it (sound, no picture). Below 1 it stays in the page.
+                + "#b.on{opacity:.99}"
                 + "iframe{position:absolute;left:-12%;top:-12%;width:124%;height:124%;border:0;pointer-events:none}"
                 + "#b.full iframe{left:-6%;top:-6%;width:112%;height:112%}"
                 + "</style></head><body><div id=b><iframe id=f allow='autoplay; encrypted-media' referrerpolicy='strict-origin-when-cross-origin' src='"
@@ -203,6 +205,8 @@ final class Trailer {
         } else if ("playing".equals(s)) {
             ui.removeCallbacks(giveUp);
             if (!playing) {
+                AppLog.w("Trailer: shown at " + web.getLeft() + "," + web.getTop() + " " + web.getWidth() + "x" + web.getHeight()
+                        + (web.getVisibility() == View.VISIBLE ? "" : " (not visible)"));
                 playing = true;
                 host.trailerPlaying();
             }
