@@ -2,6 +2,7 @@ package io.freemytv;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -40,10 +41,20 @@ final class Spotlight {
     private StaticLayout plotLayout;
     private Shader shadeLeft, shadeBottom, shadeTop;
     private final RectF r = new RectF();
+    /** Each rating source's logo in its brand colors (app/assets/ratings, from Simple Icons), as in the preview. */
+    private final java.util.Map<String, Bitmap> rateIcons = new java.util.HashMap<>();
     private final Path triangle = new Path();
     private final android.graphics.Matrix matrix = new android.graphics.Matrix();
 
     Spotlight(Context c) {
+        for (String source : new String[] {"imdb", "tmdb", "trakt", "tomatoes", "popcorn", "metacritic", "letterboxd"}) {
+            try (java.io.InputStream in = c.getAssets().open("ratings/" + source + ".png")) {
+                Bitmap b = BitmapFactory.decodeStream(in);
+                if (b != null) rateIcons.put(source, b);
+            } catch (java.io.IOException ignored) {
+                // no logo: its colored tag instead
+            }
+        }
         back = new View(c) {
             @Override protected void onDraw(Canvas canvas) { drawBack(canvas); }
         };
@@ -240,26 +251,35 @@ final class Spotlight {
         }
         y += factsH;
 
-        // 3. Ratings: each source's tag in its color, then the score.
+        // 3. Ratings: each source's logo (or its tag), then the score in its color.
         if (ratesH > 0) {
             y += 22 * k;
             e = item(2, since, a);
             float rx = x, rb = y + 24 * k + lift(e);
             for (String[] rating : t.ratings) {
                 int color = rateColor(rating[0]);
-                String label = rateLabel(rating[0]);
-                float tw = tag.measureText(label) + 14 * k;
-                r.set(rx, rb - 21 * k, rx + tw, rb + 3 * k);
-                fill.setColor(color);
-                fill.setAlpha(Math.round(a * e));
-                c.drawRoundRect(r, 5 * k, 5 * k, fill);
-                tag.setColor(rateInk(rating[0]));
-                tag.setAlpha(Math.round(a * e));
-                c.drawText(label, r.centerX(), rb - 3 * k, tag);
+                Bitmap icon = rateIcons.get(rating[0]);
+                if (icon != null) {         // the logo, 26 px tall (at most 52 wide), then the score
+                    float s = Math.min(26 * k / icon.getHeight(), 52 * k / icon.getWidth());
+                    float iw = icon.getWidth() * s, ih = icon.getHeight() * s;
+                    r.set(rx, rb - 9 * k - ih / 2, rx + iw, rb - 9 * k + ih / 2);
+                    image.setAlpha(Math.round(a * e));
+                    c.drawBitmap(icon, null, r, image);
+                } else {
+                    String label = rateLabel(rating[0]);
+                    float tw = tag.measureText(label) + 14 * k;
+                    r.set(rx, rb - 21 * k, rx + tw, rb + 3 * k);
+                    fill.setColor(color);
+                    fill.setAlpha(Math.round(a * e));
+                    c.drawRoundRect(r, 5 * k, 5 * k, fill);
+                    tag.setColor(rateInk(rating[0]));
+                    tag.setAlpha(Math.round(a * e));
+                    c.drawText(label, r.centerX(), rb - 3 * k, tag);
+                }
                 value.setColor(color);
                 value.setAlpha(Math.round(a * e));
                 c.drawText(rating[1], r.right + 9 * k, rb, value);
-                rx = r.right + 9 * k + value.measureText(rating[1]) + 24 * k;
+                rx = r.right + 9 * k + value.measureText(rating[1]) + 22 * k;
             }
             y += ratesH;
         }

@@ -199,6 +199,8 @@ final class Trailer {
     private void state(int gen, String s) {
         if (gen != generation || web == null) return;
         AppLog.w("Trailer: " + s);
+        // It runs (state 1): it shows by itself 1.5 s later, so the "didn't start in time" count stops here.
+        if ("state 1".equals(s)) ui.removeCallbacks(giveUp);
         if ("ready".equals(s)) {
             ready = true;
             if (going) web.evaluateJavascript("fmtGo()", null);
