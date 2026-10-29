@@ -134,10 +134,13 @@ final class Trailer {
             return;
         }
         ready = false;
+        vitalsSaid = 0;
         measure();
         layout();
         String id = videos[video].replaceAll("[^A-Za-z0-9_-]", "");
         web.setVisibility(View.VISIBLE);        // transparent until the video plays (a hidden page wouldn't autoplay)
+        web.onResume();                         // in case the WebView thinks it's paused: it would play sound, no picture
+        web.resumeTimers();
         web.loadDataWithBaseURL(SITE, page(id), "text/html", "utf-8", null);
         AppLog.w("Trailer: loading " + id + " for " + wanted);
     }
@@ -194,7 +197,23 @@ final class Trailer {
                 + "var tries=0;function listen(){if(heard||tries++>60)return;"
                 + "try{f.contentWindow.postMessage(JSON.stringify({event:'listening',id:1,channel:'widget'}),'*')}catch(e){}setTimeout(listen,250)}"
                 + "f.onload=function(){s('loaded');listen()};"
+                // Every 2 s while it plays: does the page think it's visible, and does it draw (frames per second)?
+                + "var fr=0;(function raf(){fr++;requestAnimationFrame(raf)})();"
+                + "setInterval(function(){if(shown){try{FMT.vitals(G,document.visibilityState+', '+Math.round(fr/2)+' fps, '"
+                + "+innerWidth+'x'+innerHeight+', on '+b.classList.contains('on'))}catch(e){}}fr=0},2000);"
                 + "</script></body></html>";
+    }
+
+    private int vitalsSaid;
+
+    /** What the page says while it plays, and what Android says about the view (a few times per trailer). */
+    private void vitals(int gen, String s) {
+        if (gen != generation || web == null || vitalsSaid++ > 3) return;
+        View p = (View) web.getParent();
+        AppLog.w("Trailer page: " + s + " | view shown " + web.isShown() + ", window " + web.getWindowVisibility()
+                + ", attached " + web.isAttachedToWindow() + ", alpha " + web.getAlpha() + "/" + (p == null ? "-" : String.valueOf(p.getAlpha()))
+                + ", at " + web.getLeft() + "," + web.getTop() + " " + web.getWidth() + "x" + web.getHeight()
+                + ", index " + (p instanceof android.view.ViewGroup ? ((android.view.ViewGroup) p).indexOfChild(web) + "/" + ((android.view.ViewGroup) p).getChildCount() : "-"));
     }
 
     private void state(int gen, String s) {
@@ -427,6 +446,12 @@ final class Trailer {
         private final Trailer owner;
 
         Bridge(Trailer owner) { this.owner = owner; }
+
+        @JavascriptInterface public void vitals(final int gen, final String s) {
+            owner.ui.post(new Runnable() {
+                @Override public void run() { owner.vitals(gen, s); }
+            });
+        }
 
         @JavascriptInterface public void state(final int gen, final String s) {
             owner.ui.post(new Runnable() {
