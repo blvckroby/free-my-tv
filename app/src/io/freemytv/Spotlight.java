@@ -106,6 +106,12 @@ final class Spotlight {
         refresh();
     }
 
+    /** The trailer started after the card opened: it plays behind, the backdrop stops zooming. */
+    void trailerUnder() {
+        trailerUnder = true;
+        back.invalidate();
+    }
+
     /** The trailer under the card ended or failed: the backdrop shows again. */
     void trailerGone() {
         trailerUnder = false;

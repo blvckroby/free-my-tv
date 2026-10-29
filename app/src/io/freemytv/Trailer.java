@@ -214,7 +214,8 @@ final class Trailer {
             ui.removeCallbacks(giveUp);
             if (!playing) {
                 AppLog.w("Trailer: shown at " + web.getLeft() + "," + web.getTop() + " " + web.getWidth() + "x" + web.getHeight()
-                        + (web.getVisibility() == View.VISIBLE ? "" : " (not visible)"));
+                        + (web.getVisibility() == View.VISIBLE ? "" : " (not visible)")
+                        + ", GPU " + web.isHardwareAccelerated() + ", layer " + web.getLayerType());
                 playing = true;
                 hole.setVisibility(View.VISIBLE);
                 host.trailerPlaying();

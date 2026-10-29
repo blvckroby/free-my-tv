@@ -130,7 +130,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Trailer trailer;
     // The title card (Spotlight): 1.2 s after the trailer shows it grows to full screen; without a trailer it opens
     // with the backdrop. Its details (Recs.title) are fetched as soon as a title is focused.
-    private static final long SPOT_AFTER_MS = 1200, SPOT_NO_TRAILER_MS = 1000;
+    private static final long SPOT_AFTER_MS = 1200, SPOT_NO_TRAILER_MS = 1000, SPOT_LATEST_MS = 3500;
     private final Spotlight spot;
     private String spotFor;             // "kind:id" of the focused title
     private Recs.Pick spotPick;
@@ -612,6 +612,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Trailer: it plays and shows; in a moment it grows into the title card. */
     void trailerPlaying() {
+        if (spot.isOpen()) {        // the card opened first: the trailer goes under it now
+            spot.trailerUnder();
+            trailer.round(0);
+            return;
+        }
         handler.removeCallbacks(openSpot);
         handler.postDelayed(openSpot, SPOT_AFTER_MS);
     }
@@ -643,6 +648,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         spotTitle = null;
         spotWanted = false;
         if (!film) return;
+        handler.postDelayed(openSpot, SPOT_LATEST_MS);     // after 3.5 s on the title, with or without its trailer
         recs.title(p, t -> {
             if (!key.equals(spotFor) || t == null) return;
             spotTitle = t;
