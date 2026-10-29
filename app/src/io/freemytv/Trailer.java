@@ -1,12 +1,20 @@
 package io.freemytv;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.Color;
 import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -42,6 +50,9 @@ final class Trailer {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final RectF rect = new RectF();
     private WebView web;
+    private ViewGroup pane;         // the WebView's own window, behind the home screen (null: inside it, as before)
+    private View hole;              // clears the home screen's window over the video (see Hole)
+    private float holeRadius;       // the video's corners, in screen pixels
     private boolean broken;         // no WebView on this TV: never try again
     private boolean ready, going;   // the video element is hooked; it was asked to play
     private boolean playing;        // it plays and shows
@@ -234,6 +245,7 @@ final class Trailer {
                         + (web.getVisibility() == View.VISIBLE ? "" : " (not visible)")
                         + ", GPU " + web.isHardwareAccelerated() + ", layer " + web.getLayerType());
                 playing = true;
+                if (hole != null) hole.setVisibility(View.VISIBLE);
                 host.trailerPlaying();
             }
         } else if (s.startsWith("error")) {
@@ -277,6 +289,7 @@ final class Trailer {
             playing = false;
             host.trailerGone();
         }
+        if (hole != null) hole.setVisibility(View.GONE);
         if (web == null || web.getVisibility() == View.GONE) return;
         web.setVisibility(View.GONE);
         web.loadUrl("about:blank");     // stops the video and its sound
@@ -299,6 +312,8 @@ final class Trailer {
 
     /** The video's corner radius, in screen pixels (0 at full screen). */
     void round(float radius) {
+        holeRadius = radius;
+        if (hole != null) hole.invalidate();
         if (web == null || web.getVisibility() == View.GONE) return;
         int px = Math.round(radius / host.getResources().getDisplayMetrics().density);
         web.evaluateJavascript("window.fmtRound&&fmtRound(" + px + ")", null);
@@ -310,7 +325,18 @@ final class Trailer {
         wanted = null;
         wantedPick = null;
         if (web == null) return;
-        host.removeView(web);
+        if (pane != null) {
+            try {
+                ((WindowManager) host.getContext().getSystemService(android.content.Context.WINDOW_SERVICE)).removeViewImmediate(pane);
+            } catch (RuntimeException ignored) {
+                // the window is already gone with the activity's
+            }
+            pane = null;
+        } else {
+            host.removeView(web);
+        }
+        if (hole != null) host.removeView(hole);
+        hole = null;
         web.destroy();
         web = null;
     }
@@ -318,7 +344,8 @@ final class Trailer {
     // Called from HomeView's onMeasure and onLayout.
     void measure() {
         if (web == null) return;
-        for (View v : new View[] {web}) {
+        for (View v : new View[] {hole, web}) {
+            if (v == null) continue;
             v.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.width())), View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.height())), View.MeasureSpec.EXACTLY));
         }
@@ -327,7 +354,67 @@ final class Trailer {
     void layout() {
         if (web == null) return;
         int l = Math.round(rect.left), t = Math.round(rect.top);
-        for (View v : new View[] {web}) v.layout(l, t, l + v.getMeasuredWidth(), t + v.getMeasuredHeight());
+        for (View v : new View[] {hole, web}) if (v != null) v.layout(l, t, l + v.getMeasuredWidth(), t + v.getMeasuredHeight());
+    }
+
+    /**
+     * On this TV (a TCL Google TV) a WebView inside the home screen's views draws (the page says visible, 57 fps) but
+     * nothing of it reaches the screen: sound, no picture. So the WebView gets its own window, as SurfaceView does
+     * for video: a media window behind the home screen's, full screen and see-through, and this view, right where
+     * the video is, clears the home screen's window there while it plays (HomeActivity makes that window
+     * translucent). The title card's text and shades, drawn above, stay over the video.
+     */
+    private final class Hole extends View {
+        private final Paint clear = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        Hole() {
+            super(host.getContext());
+            clear.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+            setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setFocusable(false);
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            c.drawRoundRect(0, 0, getWidth(), getHeight(), holeRadius, holeRadius, clear);
+        }
+    }
+
+    /** The WebView in a media window behind the home screen; false when that can't be done (it stays in the views). */
+    private boolean ownWindow() {
+        if (host.getWindowToken() == null) return false;
+        try {
+            pane = new ViewGroup(host.getContext()) {
+                @Override protected void onMeasure(int w, int h) {
+                    setMeasuredDimension(MeasureSpec.getSize(w), MeasureSpec.getSize(h));
+                    Trailer.this.measure();
+                }
+
+                @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+                    Trailer.this.layout();
+                }
+            };
+            pane.addView(web);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT);
+            lp.token = host.getWindowToken();
+            lp.gravity = Gravity.TOP | Gravity.LEFT;
+            lp.setTitle("Free My TV trailer");
+            ((WindowManager) host.getContext().getSystemService(android.content.Context.WINDOW_SERVICE)).addView(pane, lp);
+            holeRadius = host.trailerRadius();
+            hole = new Hole();
+            hole.setVisibility(View.GONE);
+            host.addTrailerView(hole);
+            AppLog.w("Trailer: own window behind the home screen");
+            return true;
+        } catch (RuntimeException e) {
+            AppLog.w("Trailer: no window of its own (" + e + "), inside the home screen");
+            if (pane != null) pane.removeView(web);
+            pane = null;
+            return false;
+        }
     }
 
     private boolean create() {
@@ -380,7 +467,7 @@ final class Trailer {
         });
         web.addJavascriptInterface(new Bridge(this), "FMT");
         web.setVisibility(View.GONE);
-        host.addTrailerView(web);
+        if (!ownWindow()) host.addTrailerView(web);
         return true;
     }
 
