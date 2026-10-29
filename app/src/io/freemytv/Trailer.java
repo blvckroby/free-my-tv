@@ -1,6 +1,10 @@
 package io.freemytv;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.Color;
 import android.graphics.RectF;
 import android.net.Uri;
@@ -42,6 +46,8 @@ final class Trailer {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final RectF rect = new RectF();
     private WebView web;
+    private View hole;              // clears the window under the video (see Hole)
+    private float holeRadius;       // the video's corners, in screen pixels
     private boolean broken;         // no WebView on this TV: never try again
     private boolean ready, going;   // the video element is hooked; it was asked to play
     private boolean playing;        // it plays and shows
@@ -210,6 +216,7 @@ final class Trailer {
                 AppLog.w("Trailer: shown at " + web.getLeft() + "," + web.getTop() + " " + web.getWidth() + "x" + web.getHeight()
                         + (web.getVisibility() == View.VISIBLE ? "" : " (not visible)"));
                 playing = true;
+                hole.setVisibility(View.VISIBLE);
                 host.trailerPlaying();
             }
         } else if (s.startsWith("error")) {
@@ -253,6 +260,7 @@ final class Trailer {
             playing = false;
             host.trailerGone();
         }
+        if (hole != null) hole.setVisibility(View.GONE);
         if (web == null || web.getVisibility() == View.GONE) return;
         web.setVisibility(View.GONE);
         web.loadUrl("about:blank");     // stops the video and its sound
@@ -275,6 +283,8 @@ final class Trailer {
 
     /** The video's corner radius, in screen pixels (0 at full screen). */
     void round(float radius) {
+        holeRadius = radius;
+        if (hole != null) hole.invalidate();
         if (web == null || web.getVisibility() == View.GONE) return;
         int px = Math.round(radius / host.getResources().getDisplayMetrics().density);
         web.evaluateJavascript("window.fmtRound&&fmtRound(" + px + ")", null);
@@ -287,6 +297,7 @@ final class Trailer {
         wantedPick = null;
         if (web == null) return;
         host.removeView(web);
+        host.removeView(hole);
         web.destroy();
         web = null;
     }
@@ -294,14 +305,38 @@ final class Trailer {
     // Called from HomeView's onMeasure and onLayout.
     void measure() {
         if (web == null) return;
-        web.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.width())), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.height())), View.MeasureSpec.EXACTLY));
+        for (View v : new View[] {hole, web}) {
+            v.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.width())), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(rect.height())), View.MeasureSpec.EXACTLY));
+        }
     }
 
     void layout() {
         if (web == null) return;
         int l = Math.round(rect.left), t = Math.round(rect.top);
-        web.layout(l, t, l + web.getMeasuredWidth(), t + web.getMeasuredHeight());
+        for (View v : new View[] {hole, web}) v.layout(l, t, l + v.getMeasuredWidth(), t + v.getMeasuredHeight());
+    }
+
+    /**
+     * On TVs whose WebView plays video on a hardware plane under the app's window (as a SurfaceView does), the page
+     * only leaves a transparent hole where the video is: whatever the home screen drew under it (the cover, the title
+     * card's backdrop) hid it, sound but no picture. This view, right under the WebView, clears the window there
+     * while the video shows, as SurfaceView does; HomeActivity makes the window translucent so the plane shows
+     * through. Where the WebView draws the video itself, it simply covers this.
+     */
+    private final class Hole extends View {
+        private final Paint clear = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        Hole() {
+            super(host.getContext());
+            clear.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+            setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setFocusable(false);
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            c.drawRoundRect(0, 0, getWidth(), getHeight(), holeRadius, holeRadius, clear);
+        }
     }
 
     private boolean create() {
@@ -349,7 +384,11 @@ final class Trailer {
         });
         web.addJavascriptInterface(new Bridge(this), "FMT");
         web.setVisibility(View.GONE);
-        host.addTrailerView(web);
+        holeRadius = host.trailerRadius();
+        hole = new Hole();
+        hole.setVisibility(View.GONE);
+        host.addTrailerView(hole);
+        host.addTrailerView(web);      // right above the hole
         return true;
     }
 

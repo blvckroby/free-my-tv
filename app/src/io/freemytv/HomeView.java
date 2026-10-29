@@ -587,7 +587,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** The trailer's view goes right above the picks, under the buttons, the shelf and the sheet. */
     void addTrailerView(View v) {
-        addView(v, indexOfChild(spot.back) + 1);
+        int after = indexOfChild(spot.back);
+        while (after + 1 < getChildCount() && isTrailerView(getChildAt(after + 1))) after++;   // the hole, then the video
+        addView(v, after + 1);
+    }
+
+    private boolean isTrailerView(View v) {
+        return v instanceof android.webkit.WebView || v.getClass().getName().startsWith(Trailer.class.getName());
     }
 
     float trailerRadius() {
