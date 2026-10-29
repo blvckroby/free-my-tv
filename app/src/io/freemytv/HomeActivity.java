@@ -38,8 +38,6 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
-        // See Trailer.Hole: a TV that plays the trailer on a plane under the window shows it through here.
-        if (Prefs.trailers()) getWindow().setFormat(android.graphics.PixelFormat.TRANSLUCENT);
         // Once: the TV asks to let Free My TV see the Google account's name, for the profile button.
         android.content.SharedPreferences asked = getSharedPreferences("profile", MODE_PRIVATE);
         int tries = asked.getInt("tries", 0);
