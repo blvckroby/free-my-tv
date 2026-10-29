@@ -33,7 +33,7 @@ import java.util.concurrent.Executors;
  * The fade is done by the page: view alpha or an outline clip on the WebView left the video black on TVs.
  */
 final class Trailer {
-    private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 6_000;
+    private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 15_000, READY_MS = 8_000;
     private static final String SITE = "https://freemytv.io/";
     private static final ExecutorService ASK = Executors.newSingleThreadExecutor();
 
@@ -204,6 +204,9 @@ final class Trailer {
         if ("state 1".equals(s)) ui.removeCallbacks(giveUp);
         if ("ready".equals(s)) {
             ready = true;
+            // The page can take a few seconds on a TV: from YouTube's first answer it has 8 s more to start.
+            ui.removeCallbacks(giveUp);
+            ui.postDelayed(giveUp, READY_MS);
             if (going) web.evaluateJavascript("fmtGo()", null);
         } else if ("playing".equals(s)) {
             ui.removeCallbacks(giveUp);
