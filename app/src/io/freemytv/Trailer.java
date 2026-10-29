@@ -43,6 +43,12 @@ import java.util.concurrent.Executors;
 final class Trailer {
     private static final long PREPARE_MS = 250, PLAY_MS = 1000, NO_SHOW_MS = 15_000, READY_MS = 8_000;
     private static final String SITE = "https://freemytv.io/";
+    /**
+     * Off: on a TCL Google TV nothing a WebView draws reaches the screen, inside the home screen or in a window of
+     * its own (the page says visible at 60 fps; only the sound comes through). Without it the title card opens with
+     * the backdrop, as when a title has no trailer.
+     */
+    static final boolean INLINE = false;
     private static final ExecutorService ASK = Executors.newSingleThreadExecutor();
 
     private final HomeView host;
@@ -75,6 +81,13 @@ final class Trailer {
         stop();
         wanted = key;
         wantedPick = p;
+        if (key != null && !INLINE) {
+            final Recs.Pick pick = p;
+            ui.postDelayed(new Runnable() {     // no video: the title card opens with its backdrop
+                @Override public void run() { if (pick == wantedPick) host.trailerNone(pick); }
+            }, 2500);                           // + 1 s in HomeView: about 3.5 s on the title
+            return;
+        }
         if (key != null && !broken && Prefs.trailers()) {
             ui.postDelayed(prepare, PREPARE_MS);
             ui.postDelayed(go, PLAY_MS);
