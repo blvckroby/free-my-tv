@@ -331,7 +331,8 @@ final class Spotlight {
         button.setAlpha(Math.round(a * e));
         c.drawText(play, tx + 34 * k, cy + Ui.halfCap(button), button);
         hint.setAlpha(Math.round(0.6f * a * e));
-        c.drawText(Ui.tr("Voltar fecha", "Back closes", "Atrás cierra", "Indietro chiude"), r.right + 22 * k, cy + Ui.halfCap(hint), hint);
+        c.drawText(Ui.tr("▲ Trailer   ·   Voltar fecha", "▲ Trailer   ·   Back closes", "▲ Tráiler   ·   Atrás cierra",
+                "▲ Trailer   ·   Indietro chiude"), r.right + 22 * k, cy + Ui.halfCap(hint), hint);
         y += actsH;
 
         // 7. Networks (shows) or the services that stream it (films), on light tiles.

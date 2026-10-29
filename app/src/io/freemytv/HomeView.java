@@ -2157,6 +2157,36 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
+    /**
+     * The title's trailer in the TV's YouTube app: inside the home screen it can't show on MediaTek TVs (their video
+     * plane reaches only native players), and YouTube's app plays it as it should.
+     */
+    private void openTrailer(Recs.Pick p) {
+        click.move();
+        new Thread(() -> {
+            String found = recs.trailer(p);
+            String id = found == null || found.isEmpty() ? "" : found.split(",")[0].replaceAll("[^A-Za-z0-9_-]", "");
+            handler.post(() -> {
+                if (id.isEmpty()) {
+                    AppLog.w("Trailer: none on TMDB for " + Recs.key(p));
+                    return;
+                }
+                android.net.Uri uri = android.net.Uri.parse("https://www.youtube.com/watch?v=" + id);
+                android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    getContext().startActivity(new android.content.Intent(i).setPackage("com.google.android.youtube.tv"));
+                } catch (RuntimeException e) {
+                    try {
+                        getContext().startActivity(i);
+                    } catch (RuntimeException e2) {
+                        AppLog.w("Trailer: no app opens YouTube links: " + e2);
+                    }
+                }
+            });
+        }, "trailer-link").start();
+    }
+
     private void back() {
         if (spot.isOpen()) {
             closeSpot();
@@ -2182,6 +2212,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        if (spot.isOpen() && dy < 0 && dx == 0 && spotPick != null) {      // up: the trailer in the YouTube app
+            openTrailer(spotPick);
+            return;
+        }
         if (spot.isOpen()) closeSpot();      // then the arrow does its usual job (another title stops the trailer)
         if (sheetOpen) {
             moveGrid(dx, dy);
