@@ -3019,19 +3019,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(p.title, row.left + 20 * k, cy + Ui.halfCap(lRailMore), lRailMore);
                 continue;
             }
-            // As in the preview: the competition's logo (or its dot) at the left; the day above; below it the time, the
-            // two sides with their crests (or the race); at the right where it's on (DAZN and Sky logos, other tags).
+            // As in the preview: the competition's own colored logo (else its dot: no white silhouettes) at the left; the
+            // day above; below it the time, the two sides with their crests (or the race); at the right where it's on.
             Bitmap own = p.logoComp.startsWith("asset:") ? sports.bitmap(p.logoComp, null) : null;
-            Bitmap online = own == null && !p.logoComp.isEmpty() ? sports.bitmap(p.logoComp, null) : null;
             if (own != null) {
                 drawLogo(c, own, row.left + 30 * k, cy, 36 * k, 36 * k, false);
-            } else if (online != null) {
-                bitmapPaint.setColorFilter(f > 0.5f ? darkLogo : whiteLogo);
-                float bs = Math.min(36 * k / online.getWidth(), 36 * k / online.getHeight());
-                tmp.set(row.left + 30 * k - online.getWidth() * bs / 2, cy - online.getHeight() * bs / 2,
-                        row.left + 30 * k + online.getWidth() * bs / 2, cy + online.getHeight() * bs / 2);
-                c.drawBitmap(online, null, tmp, bitmapPaint);
-                bitmapPaint.setColorFilter(null);
             } else {
                 fill.setColor(p.dot);
                 c.drawCircle(row.left + 30 * k, cy, 5 * k, fill);

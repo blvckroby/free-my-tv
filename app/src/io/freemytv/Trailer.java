@@ -16,7 +16,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -27,9 +26,10 @@ import java.util.concurrent.Executors;
  * the end, so YouTube's end screen with other videos never shows. Once it plays, the home screen can grow it into
  * the title card (Spotlight): HomeView moves it with place() and squares its corners with round().
  *
- * At 0.25 s the trailers are looked up and YouTube's embed page loads, unseen (with a Referer: without one YouTube
- * refuses embeds in apps, errors 152 and 153). A script then hides YouTube's own chrome and watches the video
- * itself; at 3 s it plays and fades in. A trailer YouTube won't play outside its app gives way to the next one.
+ * At 0.25 s the trailers are looked up and a small page of ours loads, unseen, with YouTube's embed in an iframe (the
+ * page's address gives YouTube the Referer it wants: without one it refuses embeds in apps, errors 152 and 153). The
+ * player is driven through YouTube's IFrame API messages, as in the HTML preview; it fades in once it plays. A
+ * trailer YouTube won't play outside its app gives way to the next one.
  * The fade is done by the page: view alpha or an outline clip on the WebView left the video black on TVs.
  */
 final class Trailer {
@@ -136,58 +136,62 @@ final class Trailer {
         measure();
         layout();
         String id = videos[video].replaceAll("[^A-Za-z0-9_-]", "");
-        String url = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&enablejsapi=1&controls=0&disablekb=1&fs=0&rel=0"
-                + "&iv_load_policy=3&modestbranding=1&playsinline=1&cc_load_policy=0&hl=" + Ui.locale().getLanguage()
-                + "&origin=" + Uri.encode(SITE.substring(0, SITE.length() - 1));
-        web.setVisibility(View.INVISIBLE);      // shown once the page is dressed and transparent
-        web.loadUrl(url, Collections.singletonMap("Referer", SITE));
+        web.setVisibility(View.VISIBLE);        // transparent until the video plays (a hidden page wouldn't autoplay)
+        web.loadDataWithBaseURL(SITE, page(id), "text/html", "utf-8", null);
         AppLog.w("Trailer: loading " + id + " for " + wanted);
     }
 
-    /** Runs in YouTube's page once it has loaded: hides its chrome, finds the video, reports what it does. */
-    private String script() {
+    /**
+     * Our own small page with YouTube's embed in an iframe, as the preview does: the page's address (freemytv.io) is
+     * the Referer and origin YouTube wants, and the player is driven by its own messages (the IFrame API's
+     * postMessage), which is what YouTube supports. The iframe is 124% big, so its edges (title, logo) fall outside.
+     */
+    private String page(String id) {
         boolean muted = !Prefs.trailerSound();
         // The cover's rounded corners, in the page's pixels.
         int radius = Math.round(host.trailerRadius() / host.getResources().getDisplayMetrics().density);
-        return "(function(){if(window.fmtG==" + generation + ")return;window.fmtG=" + generation + ";"
-                + "var G=" + generation + ",M=" + (muted ? "true" : "false") + ",said={},on=0;"
+        String origin = SITE.substring(0, SITE.length() - 1);
+        String src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&enablejsapi=1&controls=0&disablekb=1&fs=0&rel=0"
+                + "&iv_load_policy=3&modestbranding=1&playsinline=1&cc_load_policy=0&cc_lang_pref=none&hl=" + Ui.locale().getLanguage()
+                + "&origin=" + Uri.encode(origin) + "&widget_referrer=" + Uri.encode(SITE);
+        return "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><style>"
+                + "html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}"
+                + "#b{position:absolute;left:0;top:0;right:0;bottom:0;background:#000;overflow:hidden;opacity:0;transition:opacity .6s ease;"
+                + "border-radius:" + radius + "px;-webkit-transform:translateZ(0)}"
+                + "#b.on{opacity:1}"
+                + "iframe{position:absolute;left:-12%;top:-12%;width:124%;height:124%;border:0;pointer-events:none}"
+                + "#b.full iframe{left:-6%;top:-6%;width:112%;height:112%}"
+                + "</style></head><body><div id=b><iframe id=f allow='autoplay; encrypted-media' referrerpolicy='strict-origin-when-cross-origin' src='"
+                + src + "'></iframe></div><script>"
+                + "var G=" + generation + ",M=" + muted + ",f=document.getElementById('f'),b=document.getElementById('b'),"
+                + "said={},heard=0,tuned=0,shown=0,near=0,quiet=0,going=0;"
                 + "function s(x){if(said[x])return;said[x]=1;try{FMT.state(G,x)}catch(e){}}"
-                + "var st=document.createElement('style');st.textContent='html,body{background:transparent!important;overflow:hidden!important}"
-                + "html{opacity:0;transition:opacity .6s ease}html.fmt-on{opacity:1}"
-                + ".ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-pause-overlay,"
-                + ".ytp-large-play-button,.ytp-spinner,.ytp-cued-thumbnail-overlay,.ytp-paid-content-overlay,.ytp-ce-element,"
-                + ".ytp-impression-link,.ytp-youtube-button,.ytp-show-cards-title,.ytp-title,.ytp-endscreen-content,"
-                + ".ytp-contextmenu,.branding-img,.ytp-caption-window-container,.caption-window,.ytp-caption-segment{display:none!important}"
-                + ".html5-video-player,#player{background:#000!important;overflow:hidden!important}"
-                + "video{object-fit:cover!important}';"
-                + "document.head.appendChild(st);"
-                + "var rd=document.createElement('style');rd.id='fmt-r';document.head.appendChild(rd);"
-                + "window.fmtRound=function(r){rd.textContent='.html5-video-player,#player{border-radius:'+r+'px!important}'};fmtRound(" + radius + ");"
-                // YouTube keeps an empty error box in the page: only a visible one with a message, before any playing, counts.
-                + "function err(){if(on)return false;var e=document.querySelector('.ytp-error'),t=e?(e.innerText||'').replace(/\\s+/g,' ').trim():'';"
-                + "if(e&&e.offsetParent!==null&&t){s('error '+t.slice(0,90));return true}return false}"
-                + "function hook(){if(err())return;var v=document.querySelector('video');if(!v){setTimeout(hook,200);return}"
-                + "window.fmtV=v;"
-                + "v.addEventListener('playing',function(){if(near)return;on=1;tune();document.documentElement.classList.add('fmt-on');s('playing')});"
-                // A short clip before the trailer (an ad, YouTube's bumper) also "ends": only the trailer's end counts.
-                + "v.addEventListener('ended',function(){if(v.duration&&v.duration<20){s('short clip ended');return}"
-                + "document.documentElement.classList.remove('fmt-on');s('ended')});"
-                + "v.addEventListener('pause',function(){s('paused at '+Math.round(v.currentTime)+'s')});"
+                + "function cmd(fn,a){try{f.contentWindow.postMessage(JSON.stringify({event:'command',func:fn,args:a||[],id:1,channel:'widget'}),'*')}catch(e){}}"
+                + "window.fmtRound=function(r){b.style.borderRadius=r+'px';if(r==0)b.classList.add('full');else b.classList.remove('full')};"
+                + "window.fmtGo=function(){going=1;cmd('playVideo')};"
+                + "function off(){b.classList.remove('on')}"
+                + "addEventListener('message',function(m){if(m.source!==f.contentWindow||typeof m.data!='string')return;"
+                + "var d;try{d=JSON.parse(m.data)}catch(e){return}"
+                + "if(!heard){heard=1;s('ready')}"
+                + "if(d.event=='onError'){s('error '+d.info);return}"
+                + "var i=d.info&&typeof d.info=='object'?d.info:{},st=d.event=='onStateChange'?d.info:i.playerState;"
+                + "if(typeof st=='number')s('state '+st);"
+                // Playing: subtitles off and the sound up the first time; it shows 1.5 s later (YouTube's title gone).
+                + "if(st===1&&!near){if(!tuned){tuned=1;cmd('unloadModule',['captions']);cmd('unloadModule',['cc']);"
+                + "if(!M){cmd('unMute');cmd('setVolume',[100])}}"
+                + "if(!shown){shown=1;setTimeout(function(){if(!near){b.classList.add('on');s('playing')}},1500)}else b.classList.add('on')}"
+                // Paused right after the sound went up: not allowed here, so muted again and on it goes.
+                + "if(st===2&&tuned&&!M&&!quiet&&!(i.currentTime>8)){quiet=1;s('no sound allowed, muted');cmd('mute');cmd('playVideo');return}"
+                + "if(st===2&&going&&!shown)cmd('playVideo');"
+                + "if(st===0){near=1;off();s('ended')}"
                 // 6 s before the end it fades out: YouTube's end screen (other videos) never shows.
-                + "var near=0;v.addEventListener('timeupdate',function(){if(!near&&v.duration>20&&v.duration-v.currentTime<6){near=1;"
-                + "document.documentElement.classList.remove('fmt-on');s('ended')}});"
-                + "s('ready')}"
-                // YouTube's own player starts the video (the <video> alone doesn't load the stream): muted first,
-                // always allowed, then the sound up and the subtitles off once it plays.
-                + "function mp(){return document.getElementById('movie_player')}"
-                + "var tuned=0;function tune(){var p=mp();if(tuned||!p)return;tuned=1;"
-                + "try{p.unloadModule('captions');p.unloadModule('cc')}catch(e){}"
-                + "if(!M){try{p.unMute();p.setVolume(100)}catch(e){}}}"
-                + "window.fmtGo=function(){var p=mp(),v=window.fmtV;if(!p||!p.playVideo){setTimeout(fmtGo,200);return}"
-                + "try{p.playVideo()}catch(e){}"
-                + "setTimeout(function(){var q=mp();if(v&&v.paused&&q){try{q.mute();q.playVideo()}catch(e){}"
-                + "var b=document.querySelector('.ytp-large-play-button');if(v.paused&&b)b.click();s('nudged')}},2000)};"
-                + "setInterval(err,1000);hook();})()";
+                + "if(!near&&i.duration>20&&i.currentTime&&i.duration-i.currentTime<6){near=1;off();s('ended')}"
+                + "});"
+                // Until the player answers, it's told we listen (as YouTube's own IFrame API does).
+                + "var tries=0;function listen(){if(heard||tries++>60)return;"
+                + "try{f.contentWindow.postMessage(JSON.stringify({event:'listening',id:1,channel:'widget'}),'*')}catch(e){}setTimeout(listen,250)}"
+                + "f.onload=function(){s('loaded');listen()};"
+                + "</script></body></html>";
     }
 
     private void state(int gen, String s) {
@@ -195,7 +199,6 @@ final class Trailer {
         AppLog.w("Trailer: " + s);
         if ("ready".equals(s)) {
             ready = true;
-            web.setVisibility(View.VISIBLE);    // still transparent: the page fades in when the video plays
             if (going) web.evaluateJavascript("fmtGo()", null);
         } else if ("playing".equals(s)) {
             ui.removeCallbacks(giveUp);
@@ -266,7 +269,7 @@ final class Trailer {
 
     /** The video's corner radius, in screen pixels (0 at full screen). */
     void round(float radius) {
-        if (web == null || !ready) return;
+        if (web == null || web.getVisibility() == View.GONE) return;
         int px = Math.round(radius / host.getResources().getDisplayMetrics().density);
         web.evaluateJavascript("window.fmtRound&&fmtRound(" + px + ")", null);
     }
@@ -322,16 +325,6 @@ final class Trailer {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String scheme = r.getUrl().getScheme();
                 return !"https".equals(scheme) && !"http".equals(scheme);   // no jumps into other apps
-            }
-
-            @Override public void onPageFinished(WebView v, String url) {
-                if (url == null || url.startsWith("about:")) return;
-                if (url.contains("consent.")) {
-                    AppLog.w("Trailer: YouTube asks for cookie consent, can't play here");
-                    finish();
-                    return;
-                }
-                v.evaluateJavascript(script(), null);
             }
 
             @Override public void onReceivedHttpError(WebView v, WebResourceRequest r, WebResourceResponse e) {
